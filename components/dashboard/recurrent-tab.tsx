@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie, Cell } from "recharts"
 import type { Ticket, CategoryStats } from "@/lib/support-types"
@@ -44,7 +45,12 @@ const chartConfig = {
 
 export function RecurrentTab({ tickets, categoryStats }: RecurrentTabProps) {
   const keywords = useMemo(() => extractKeywords(tickets), [tickets])
-  const categoryExamples = useMemo(() => getCategoryExamples(tickets, 3), [tickets])
+  const categoryExamples = useMemo(() => getCategoryExamples(tickets, 5), [tickets])
+  const categoryEntries = useMemo(() => Object.entries(categoryExamples), [categoryExamples])
+  const [exPage, setExPage] = useState(0)
+  const EX_PER_PAGE = 4
+  const exTotalPages = Math.ceil(categoryEntries.length / EX_PER_PAGE)
+  const exPageEntries = categoryEntries.slice(exPage * EX_PER_PAGE, (exPage + 1) * EX_PER_PAGE)
   
   const pieData = useMemo(() => {
     const total = categoryStats.reduce((sum, c) => sum + c.total, 0)
@@ -197,26 +203,22 @@ export function RecurrentTab({ tickets, categoryStats }: RecurrentTabProps) {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[180px]">Categoria</TableHead>
-                  <TableHead>Exemplo 1</TableHead>
-                  <TableHead>Exemplo 2</TableHead>
-                  <TableHead>Exemplo 3</TableHead>
+                  <TableHead className="w-[160px]">Categoria</TableHead>
+                  {[1,2,3,4,5].map(n => (
+                    <TableHead key={n} className="w-[calc((100%-160px)/5)]">Exemplo {n}</TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {Object.entries(categoryExamples).map(([categoria, exemplos]) => (
+                {exPageEntries.map(([categoria, exemplos]) => (
                   <TableRow key={categoria}>
-                    <TableCell className="font-medium">{categoria}</TableCell>
-                    {[0, 1, 2].map(i => (
-                      <TableCell 
-                        key={i} 
-                        className="text-sm text-muted-foreground max-w-[200px]"
-                        title={exemplos[i] || ""}
-                      >
-                        {exemplos[i] ? <ExpandableText text={exemplos[i]} limit={60} /> : "-"}
+                    <TableCell className="font-medium align-top">{categoria}</TableCell>
+                    {[0,1,2,3,4].map(i => (
+                      <TableCell key={i} className="text-sm text-muted-foreground align-top break-words whitespace-normal">
+                        {exemplos[i] ? <ExpandableText text={exemplos[i]} limit={50} /> : "-"}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -224,6 +226,19 @@ export function RecurrentTab({ tickets, categoryStats }: RecurrentTabProps) {
               </TableBody>
             </Table>
           </div>
+          {exTotalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+              <span>Página {exPage + 1} de {exTotalPages}</span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setExPage(p => p - 1)} disabled={exPage === 0}>
+                  Anterior
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setExPage(p => p + 1)} disabled={exPage >= exTotalPages - 1}>
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
