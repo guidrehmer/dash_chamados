@@ -1,14 +1,30 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie, Cell } from "recharts"
 import type { Ticket, CategoryStats } from "@/lib/support-types"
-import { extractKeywords, getCategoryExamples, truncateText } from "@/lib/support-utils"
+import { extractKeywords, getCategoryExamples } from "@/lib/support-utils"
 import { cn } from "@/lib/utils"
 import { Repeat, Cloud, FileText } from "lucide-react"
+
+function ExpandableText({ text, limit = 60 }: { text: string; limit?: number }) {
+  const [expanded, setExpanded] = useState(false)
+  if (text.length <= limit) return <span>{text}</span>
+  return (
+    <span>
+      {expanded ? text : text.substring(0, limit)}
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="ml-1 text-primary hover:underline text-xs font-medium"
+      >
+        {expanded ? "menos" : "...ver mais"}
+      </button>
+    </span>
+  )
+}
 
 interface RecurrentTabProps {
   tickets: Ticket[]
@@ -200,7 +216,7 @@ export function RecurrentTab({ tickets, categoryStats }: RecurrentTabProps) {
                         className="text-sm text-muted-foreground max-w-[200px]"
                         title={exemplos[i] || ""}
                       >
-                        {exemplos[i] ? truncateText(exemplos[i], 60) : "-"}
+                        {exemplos[i] ? <ExpandableText text={exemplos[i]} limit={60} /> : "-"}
                       </TableCell>
                     ))}
                   </TableRow>
