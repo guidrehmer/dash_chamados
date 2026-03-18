@@ -1,15 +1,31 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from "recharts"
 import { KPICard } from "./kpi-card"
 import { StatusBadge } from "./status-badge"
 import type { Ticket, KPIData, HourlyData, DailyData } from "@/lib/support-types"
-import { formatTime, truncateText, getSLAColor } from "@/lib/support-utils"
+import { formatTime, getSLAColor } from "@/lib/support-utils"
 import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity } from "lucide-react"
+
+function ExpandableText({ text, limit = 50 }: { text: string; limit?: number }) {
+  const [expanded, setExpanded] = useState(false)
+  if (text.length <= limit) return <span>{text}</span>
+  return (
+    <span>
+      {expanded ? text : text.substring(0, limit)}
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="ml-1 text-primary hover:underline text-xs font-medium whitespace-nowrap"
+      >
+        {expanded ? "menos" : "...ver mais"}
+      </button>
+    </span>
+  )
+}
 
 interface OverviewTabProps {
   tickets: Ticket[]
@@ -270,7 +286,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
                       className="text-sm max-w-[300px]"
                       title={ticket.descricao}
                     >
-                      {truncateText(ticket.descricao, 80)}
+                      <ExpandableText text={ticket.descricao} limit={50} />
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={ticket.situacao} />

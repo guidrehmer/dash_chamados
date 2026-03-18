@@ -468,7 +468,7 @@ export function buildAIContext(tickets: Ticket[], kpis: KPIData, categoryStats: 
 Analise os dados abaixo e responda em português brasileiro de forma objetiva, 
 direta e acionável, com bullet points e destaques em negrito quando relevante.
 
-RESUMO DOS DADOS DO SUPORTE — Romance Moda
+RESUMO DOS DADOS DO SUPORTE — CrisduLabs
 - Total de atendimentos: ${kpis.total}
 - Período dos dados: ${dataRange}
 - Atendimentos hoje: ${kpis.hoje} | esta semana: ${kpis.semana} | este mês: ${kpis.mes}

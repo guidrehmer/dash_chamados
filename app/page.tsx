@@ -89,7 +89,7 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold text-slate-900">
-                Dashboard de Suporte - Romance Moda
+                Dashboard de Suporte - CrisduLabs
               </h1>
               {lastUpdate && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -252,7 +252,7 @@ export default function DashboardPage() {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center text-xs text-muted-foreground">
-          Dashboard de Monitoramento de Suporte - Romance Moda
+          Dashboard de Monitoramento de Suporte - CrisduLabs
         </div>
       </footer>
     </div>
