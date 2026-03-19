@@ -9,7 +9,8 @@ import { KPICard } from "./kpi-card"
 import { StatusBadge } from "./status-badge"
 import type { Ticket, KPIData, HourlyData, DailyData } from "@/lib/support-types"
 import { formatTime, getSLAColor } from "@/lib/support-utils"
-import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity } from "lucide-react"
+import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -38,7 +39,8 @@ async function fetchAtendimentosHoje(): Promise<AtendimentoDia[]> {
     offset += 25
     if (offset > 10000) break
   }
-  return all
+  const hoje = new Date().toLocaleDateString("en-CA") // YYYY-MM-DD local date
+  return all.filter(item => item.dataencerrado && item.dataencerrado.slice(0, 10) === hoje)
 }
 
 function ExpandableText({ text, limit = 50 }: { text: string; limit?: number }) {
@@ -101,6 +103,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
   const [hojeOpen, setHojeOpen] = useState(false)
   const [hojeLoading, setHojeLoading] = useState(false)
   const [hojeData, setHojeData] = useState<AtendimentoDia[]>([])
+  const [hojeMaximized, setHojeMaximized] = useState(false)
 
   const handleHojeClick = useCallback(async () => {
     setHojeOpen(true)
@@ -163,9 +166,12 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
         </div>
 
         <Dialog open={hojeOpen} onOpenChange={setHojeOpen}>
-          <DialogContent className="w-[90vw] max-w-[90vw] max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className={hojeMaximized ? "w-screen max-w-screen h-screen max-h-screen rounded-none overflow-auto" : "overflow-auto"} style={hojeMaximized ? {} : { width: "90vw", maxWidth: "90vw", height: "80vh", maxHeight: "90vh", minWidth: "400px", minHeight: "300px", resize: "both" }}>
+            <DialogHeader className="flex flex-row items-center justify-between pr-8">
               <DialogTitle>Atendimentos Hoje ({hojeData.length})</DialogTitle>
+              <Button variant="ghost" size="icon" onClick={() => setHojeMaximized(v => !v)} title={hojeMaximized ? "Restaurar" : "Maximizar"}>
+                {hojeMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </Button>
             </DialogHeader>
             {hojeLoading ? (
               <div className="flex justify-center py-10 text-sm text-muted-foreground">Carregando...</div>

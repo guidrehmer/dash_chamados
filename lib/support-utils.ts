@@ -51,7 +51,7 @@ export function categorizeTicket(descricao: string): Categoria {
   return "Outros"
 }
 
-// Convert UTC date to Brazil local time (UTC-3)
+// Parse date string — keep Z so JS converts UTC → local timezone automatically
 export function toBrazilTime(dateStr: string): Date {
   return new Date(dateStr)
 }
@@ -59,7 +59,7 @@ export function toBrazilTime(dateStr: string): Date {
 // Calculate resolution time in minutes
 export function calculateResolutionTime(abertura: string, encerrado: string | null): number | null {
   if (!encerrado) return null
-  
+
   const start = new Date(abertura).getTime()
   const end = new Date(encerrado).getTime()
   const diffMinutes = (end - start) / (1000 * 60)
@@ -86,19 +86,18 @@ export function filterByPeriod(tickets: Ticket[], period: PeriodFilter): Ticket[
   if (period === "todos") return tickets
   
   const now = new Date()
-  const brazilNow = new Date(now.getTime() - 3 * 60 * 60 * 1000)
-  
-  const startOfDay = new Date(brazilNow)
+
+  const startOfDay = new Date(now)
   startOfDay.setHours(0, 0, 0, 0)
-  
-  const startOfWeek = new Date(brazilNow)
-  const dayOfWeek = brazilNow.getDay()
-  const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Monday as start
-  startOfWeek.setDate(brazilNow.getDate() - diff)
+
+  const startOfWeek = new Date(now)
+  const dayOfWeek = now.getDay()
+  const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  startOfWeek.setDate(now.getDate() - diff)
   startOfWeek.setHours(0, 0, 0, 0)
-  
-  const startOfMonth = new Date(brazilNow.getFullYear(), brazilNow.getMonth(), 1)
-  
+
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
   return tickets.filter(ticket => {
     const ticketDate = ticket.dataAberturaLocal
     switch (period) {
@@ -123,20 +122,19 @@ export function filterByGroup(tickets: Ticket[], group: GroupFilter): Ticket[] {
 // Calculate KPIs
 export function calculateKPIs(tickets: Ticket[]): KPIData {
   const now = new Date()
-  const brazilNow = new Date(now.getTime() - 3 * 60 * 60 * 1000)
-  
-  const startOfDay = new Date(brazilNow)
+
+  const startOfDay = new Date(now)
   startOfDay.setHours(0, 0, 0, 0)
-  
-  const startOfWeek = new Date(brazilNow)
-  const dayOfWeek = brazilNow.getDay()
+
+  const startOfWeek = new Date(now)
+  const dayOfWeek = now.getDay()
   const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-  startOfWeek.setDate(brazilNow.getDate() - diff)
+  startOfWeek.setDate(now.getDate() - diff)
   startOfWeek.setHours(0, 0, 0, 0)
-  
-  const startOfMonth = new Date(brazilNow.getFullYear(), brazilNow.getMonth(), 1)
-  
-  const hoje = tickets.filter(t => t.dataAberturaLocal >= startOfDay).length
+
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+  const hoje = tickets.filter(t => t.dataEncerradoLocal !== null && t.dataEncerradoLocal >= startOfDay).length
   const semana = tickets.filter(t => t.dataAberturaLocal >= startOfWeek).length
   const mes = tickets.filter(t => t.dataAberturaLocal >= startOfMonth).length
   
@@ -277,20 +275,19 @@ export function getHourlyDistribution(tickets: Ticket[]): HourlyData[] {
 // Get daily data for last 30 days
 export function getDailyData(tickets: Ticket[], days: number = 30): DailyData[] {
   const now = new Date()
-  const brazilNow = new Date(now.getTime() - 3 * 60 * 60 * 1000)
-  
+
   const result: DailyData[] = []
-  
+
   for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(brazilNow)
+    const date = new Date(now)
     date.setDate(date.getDate() - i)
     date.setHours(0, 0, 0, 0)
     
     const nextDate = new Date(date)
     nextDate.setDate(nextDate.getDate() + 1)
     
-    const dayTickets = tickets.filter(t => 
-      t.dataAberturaLocal >= date && t.dataAberturaLocal < nextDate
+    const dayTickets = tickets.filter(t =>
+      t.dataEncerradoLocal !== null && t.dataEncerradoLocal >= date && t.dataEncerradoLocal < nextDate
     )
     
     const ticketsWithTime = dayTickets.filter(t => t.tempoResolucao !== null)
@@ -391,12 +388,11 @@ export function getCategoryExamples(tickets: Ticket[], limit: number = 3): Recor
 // Get week comparison data
 export function getWeekComparison(tickets: Ticket[]): { current: number; previous: number; delta: number; percentChange: number } {
   const now = new Date()
-  const brazilNow = new Date(now.getTime() - 3 * 60 * 60 * 1000)
-  
-  const startOfCurrentWeek = new Date(brazilNow)
-  const dayOfWeek = brazilNow.getDay()
+
+  const startOfCurrentWeek = new Date(now)
+  const dayOfWeek = now.getDay()
   const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-  startOfCurrentWeek.setDate(brazilNow.getDate() - diff)
+  startOfCurrentWeek.setDate(now.getDate() - diff)
   startOfCurrentWeek.setHours(0, 0, 0, 0)
   
   const startOfPreviousWeek = new Date(startOfCurrentWeek)
