@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -10,19 +10,52 @@ import { StatusBadge } from "./status-badge"
 import type { Ticket, KPIData, HourlyData, DailyData } from "@/lib/support-types"
 import { formatTime, getSLAColor } from "@/lib/support-utils"
 import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+
+interface AtendimentoDia {
+  dataabertura: string
+  dataencerrado: string | null
+  titulo: string
+  descricao: string
+  situacao: string
+  usuario: string
+  grupo: string
+  responsavel: string | null
+}
+
+async function fetchAtendimentosHoje(): Promise<AtendimentoDia[]> {
+  const BASE = "https://sistema.romancemoda.com.br/apex/romance/company/atendimentos/"
+  const all: AtendimentoDia[] = []
+  let offset = 0
+  let hasMore = true
+  while (hasMore) {
+    const url = offset === 0 ? `${BASE}?filtro=HOJE` : `${BASE}?filtro=HOJE&offset=${offset}`
+    const res = await fetch(url, { headers: { Accept: "application/json" } })
+    const data = await res.json()
+    if (data.items) all.push(...data.items)
+    hasMore = data.hasMore === true
+    offset += 25
+    if (offset > 10000) break
+  }
+  return all
+}
 
 function ExpandableText({ text, limit = 50 }: { text: string; limit?: number }) {
-  const [expanded, setExpanded] = useState(false)
   if (text.length <= limit) return <span>{text}</span>
   return (
     <span>
-      {expanded ? text : text.substring(0, limit)}
-      <button
-        onClick={() => setExpanded(v => !v)}
-        className="ml-1 text-primary hover:underline text-xs font-medium whitespace-nowrap"
-      >
-        {expanded ? "menos" : "...ver mais"}
-      </button>
+      {text.substring(0, limit)}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className="ml-1 text-primary hover:underline text-xs font-medium whitespace-nowrap">
+            ...ver mais
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-80 text-sm text-slate-700 leading-relaxed">
+          {text}
+        </PopoverContent>
+      </Popover>
     </span>
   )
 }
@@ -65,6 +98,21 @@ const chartConfig = {
 }
 
 export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTabProps) {
+  const [hojeOpen, setHojeOpen] = useState(false)
+  const [hojeLoading, setHojeLoading] = useState(false)
+  const [hojeData, setHojeData] = useState<AtendimentoDia[]>([])
+
+  const handleHojeClick = useCallback(async () => {
+    setHojeOpen(true)
+    setHojeLoading(true)
+    try {
+      const data = await fetchAtendimentosHoje()
+      setHojeData(data)
+    } finally {
+      setHojeLoading(false)
+    }
+  }, [])
+
   const peakHour = useMemo(() => {
     return hourlyData.reduce((max, h) => h.quantidade > max.quantidade ? h : max, hourlyData[0])?.hora ?? 0
   }, [hourlyData])
@@ -105,12 +153,56 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
           icon={<BarChart3 className="h-4 w-4" />}
           status="neutral"
         />
-        <KPICard
-          title="Atendimentos Hoje"
-          value={kpis.hoje}
-          icon={<Activity className="h-4 w-4" />}
-          status="neutral"
-        />
+        <div onClick={handleHojeClick} className="cursor-pointer">
+          <KPICard
+            title="Atendimentos Hoje"
+            value={kpis.hoje}
+            icon={<Activity className="h-4 w-4" />}
+            status="neutral"
+          />
+        </div>
+
+        <Dialog open={hojeOpen} onOpenChange={setHojeOpen}>
+          <DialogContent className="w-[90vw] max-w-[90vw] max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Atendimentos Hoje ({hojeData.length})</DialogTitle>
+            </DialogHeader>
+            {hojeLoading ? (
+              <div className="flex justify-center py-10 text-sm text-muted-foreground">Carregando...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[130px]">Abertura</TableHead>
+                      <TableHead className="w-[130px]">Encerramento</TableHead>
+                      <TableHead className="w-[160px]">Título</TableHead>
+                      <TableHead className="w-[120px]">Responsável</TableHead>
+                      <TableHead className="w-[120px]">Usuário</TableHead>
+                      <TableHead className="w-[90px]">Grupo</TableHead>
+                      <TableHead className="w-[110px]">Status</TableHead>
+                      <TableHead>Descrição</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {hojeData.map((item, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-xs">{new Date(item.dataabertura).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}</TableCell>
+                        <TableCell className="text-xs">{item.dataencerrado ? new Date(item.dataencerrado).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "-"}</TableCell>
+                        <TableCell className="text-xs font-medium">{item.titulo}</TableCell>
+                        <TableCell className="text-xs">{item.responsavel || "-"}</TableCell>
+                        <TableCell className="text-xs">{item.usuario}</TableCell>
+                        <TableCell className="text-xs">{item.grupo}</TableCell>
+                        <TableCell><StatusBadge status={item.situacao as any} /></TableCell>
+                        <TableCell className="text-xs"><ExpandableText text={item.descricao} limit={40} /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
         <KPICard
           title="Esta Semana"
           value={kpis.semana}
@@ -232,7 +324,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
               <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
               <ChartTooltip 
                 content={<ChartTooltipContent />}
-                formatter={(value, name) => [value, "Atendimentos"]}
+                formatter={(value) => [value, "Atendimentos"]}
               />
               <Bar dataKey="quantidade" radius={[4, 4, 0, 0]}>
                 {hourlyChartData.map((entry, index) => (
@@ -257,6 +349,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
                   <TableHead className="w-[140px]">Data Abertura</TableHead>
                   <TableHead className="w-[140px]">Data Encerramento</TableHead>
                   <TableHead className="w-[160px]">Categoria</TableHead>
+                  <TableHead className="w-[140px]">Responsável</TableHead>
                   <TableHead>Descricao</TableHead>
                   <TableHead className="w-[120px]">Status</TableHead>
                   <TableHead className="w-[100px] text-right">Tempo</TableHead>
@@ -282,11 +375,9 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
                       ) : "-"}
                     </TableCell>
                     <TableCell className="text-sm font-medium">{ticket.categoria}</TableCell>
-                    <TableCell 
-                      className="text-sm max-w-[300px]"
-                      title={ticket.descricao}
-                    >
-                      <ExpandableText text={ticket.descricao} limit={50} />
+                    <TableCell className="text-sm">{ticket.responsavel || "-"}</TableCell>
+                    <TableCell className="text-sm max-w-[300px]">
+                      <ExpandableText text={ticket.descricao} limit={40} />
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={ticket.situacao} />
