@@ -31,7 +31,27 @@ import {
 } from "@/lib/support-utils"
 import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2 } from "lucide-react"
 
-const fetcher = (url: string) => fetch(url).then(res => res.json())
+const BASE_API = "https://sistema.romancemoda.com.br/apex/romance/company/suporte/"
+
+async function fetchAllTickets(): Promise<{ items: TicketRaw[] }> {
+  const allItems: TicketRaw[] = []
+  let offset = 0
+  let hasMore = true
+
+  while (hasMore && offset <= 10000) {
+    const url = offset === 0 ? BASE_API : `${BASE_API}?offset=${offset}`
+    const res = await fetch(url, { headers: { Accept: "application/json" } })
+    if (!res.ok) throw new Error(`Erro ${res.status}`)
+    const data = await res.json()
+    if (data.items) allItems.push(...data.items)
+    hasMore = data.hasMore === true
+    offset += 25
+  }
+
+  return { items: allItems }
+}
+
+const fetcher = () => fetchAllTickets()
 
 function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [usuario, setUsuario] = useState("")
@@ -111,7 +131,7 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
           <Button
             type="submit"
             disabled={loading}
-            className="w-full h-12 rounded-xl bg-white text-slate-900 hover:bg-white/90 font-semibold text-sm tracking-wide mt-2"
+            className="w-full h-12 rounded-xl bg-white text-slate-900 hover:bg-white/90 font-semibold text-sm tracking-wide mt-2 disabled:opacity-60"
           >
             {loading ? "Entrando..." : "Entrar"}
           </Button>
@@ -139,7 +159,7 @@ export default function DashboardPage() {
   }, [])
 
   const { data, error, isLoading, mutate } = useSWR(
-    autenticado ? "/api/support" : null,
+    autenticado ? "support-tickets" : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
@@ -230,16 +250,15 @@ export default function DashboardPage() {
 
   // Format timestamp
   const lastUpdate = useMemo(() => {
-    if (!data?.timestamp) return null
-    const date = new Date(data.timestamp)
-    return date.toLocaleString("pt-BR", {
+    if (!data) return null
+    return new Date().toLocaleString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit"
     })
-  }, [data?.timestamp])
+  }, [data])
 
   const handleRefresh = useCallback(() => {
     sessionRef.current++ // cancela qualquer fetch em background
