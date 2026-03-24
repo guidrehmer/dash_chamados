@@ -27,9 +27,10 @@ export interface Ticket extends TicketRaw {
 export interface APIResponse {
   items: TicketRaw[]
   hasMore: boolean
+  nextOffset?: number | null
 }
 
-export type PeriodFilter = "hoje" | "semana" | "mes" | "todos"
+export type PeriodFilter = "hoje" | "semana" | "mes" | "personalizado" | "todos"
 export type GroupFilter = "TODOS" | "SISTEMAS" | "CIT"
 
 export interface KPIData {
@@ -45,6 +46,8 @@ export interface KPIData {
   categoriaMaisRecorrente: { nome: string; percentual: number }
   horaPico: number
   violacoesSLA: number
+  criticalTickets: number // tickets que levaram mais de 24h
+  semResponsavel: number  // tickets sem responsável atribuído
 }
 
 export interface CategoryStats {

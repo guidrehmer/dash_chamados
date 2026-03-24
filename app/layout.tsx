@@ -11,21 +11,9 @@ export const metadata: Metadata = {
   description: 'Monitoramento de atendimentos de suporte de Sistemas e CIT',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: '/favicon-logo.png',
+    shortcut: '/favicon-logo.png',
+    apple: '/favicon-logo.png',
   },
 }
 

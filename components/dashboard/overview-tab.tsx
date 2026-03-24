@@ -9,7 +9,7 @@ import { KPICard } from "./kpi-card"
 import { StatusBadge } from "./status-badge"
 import type { Ticket, KPIData, HourlyData, DailyData } from "@/lib/support-types"
 import { formatTime, getSLAColor } from "@/lib/support-utils"
-import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2 } from "lucide-react"
+import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2, UserX, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -39,8 +39,9 @@ async function fetchAtendimentosHoje(): Promise<AtendimentoDia[]> {
     offset += 25
     if (offset > 10000) break
   }
+  // Filter by opening date (consistent with KPI "Abertos Hoje")
   const hoje = new Date().toLocaleDateString("en-CA") // YYYY-MM-DD local date
-  return all.filter(item => item.dataencerrado && item.dataencerrado.slice(0, 10) === hoje)
+  return all.filter(item => item.dataabertura && item.dataabertura.slice(0, 10) === hoje)
 }
 
 function ExpandableText({ text, limit = 50 }: { text: string; limit?: number }) {
@@ -158,7 +159,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
         />
         <div onClick={handleHojeClick} className="cursor-pointer">
           <KPICard
-            title="Atendimentos Hoje"
+            title="Abertos Hoje"
             value={kpis.hoje}
             icon={<Activity className="h-4 w-4" />}
             status="neutral"
@@ -168,7 +169,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
         <Dialog open={hojeOpen} onOpenChange={setHojeOpen}>
           <DialogContent className={hojeMaximized ? "w-screen max-w-screen h-screen max-h-screen rounded-none overflow-auto" : "overflow-auto"} style={hojeMaximized ? {} : { width: "90vw", maxWidth: "90vw", height: "80vh", maxHeight: "90vh", minWidth: "400px", minHeight: "300px", resize: "both" }}>
             <DialogHeader className="flex flex-row items-center justify-between pr-8">
-              <DialogTitle>Atendimentos Hoje ({hojeData.length})</DialogTitle>
+              <DialogTitle>Abertos Hoje ({hojeData.length})</DialogTitle>
               <Button variant="ghost" size="icon" onClick={() => setHojeMaximized(v => !v)} title={hojeMaximized ? "Restaurar" : "Maximizar"}>
                 {hojeMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
@@ -248,6 +249,20 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
           subtitle="< 15 minutos"
           icon={<Zap className="h-4 w-4" />}
           status={kpis.quickWins >= 30 ? "green" : kpis.quickWins >= 15 ? "yellow" : "red"}
+        />
+        <KPICard
+          title="Sem Responsável"
+          value={kpis.semResponsavel}
+          subtitle="Não atribuídos"
+          icon={<UserX className="h-4 w-4" />}
+          status={kpis.semResponsavel === 0 ? "green" : kpis.semResponsavel <= 5 ? "yellow" : "red"}
+        />
+        <KPICard
+          title="Casos Críticos"
+          value={kpis.criticalTickets}
+          subtitle="> 24 horas"
+          icon={<ShieldAlert className="h-4 w-4" />}
+          status={kpis.criticalTickets === 0 ? "green" : kpis.criticalTickets <= 3 ? "yellow" : "red"}
         />
       </div>
 

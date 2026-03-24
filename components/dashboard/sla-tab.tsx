@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -8,7 +8,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Cell, Comp
 import { KPICard } from "./kpi-card"
 import type { Ticket, KPIData, DailyData, TimeDistribution } from "@/lib/support-types"
 import { formatTime, truncateText, getSLAColor, getSLAViolations } from "@/lib/support-utils"
-import { Clock, Target, AlertTriangle, Zap, TrendingUp } from "lucide-react"
+import { Clock, Target, AlertTriangle, Zap, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface SLATabProps {
   tickets: Ticket[]
@@ -28,8 +29,16 @@ const chartConfig = {
   }
 }
 
+const VIOLATIONS_PER_PAGE = 20
+
 export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabProps) {
   const violations = useMemo(() => getSLAViolations(tickets), [tickets])
+  const [violationsPage, setViolationsPage] = useState(0)
+  const totalViolationPages = Math.ceil(violations.length / VIOLATIONS_PER_PAGE)
+  const pagedViolations = violations.slice(
+    violationsPage * VIOLATIONS_PER_PAGE,
+    (violationsPage + 1) * VIOLATIONS_PER_PAGE
+  )
 
   const dailyTMAData = useMemo(() => {
     return dailyData.map(d => ({
@@ -219,25 +228,32 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[140px]">Data Abertura</TableHead>
-                    <TableHead className="w-[160px]">Categoria</TableHead>
+                    <TableHead className="w-[150px]">Categoria</TableHead>
+                    <TableHead className="w-[140px]">Responsável</TableHead>
                     <TableHead className="w-[100px] text-right">Tempo Total</TableHead>
                     <TableHead>Descricao</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {violations.slice(0, 50).map((ticket, index) => (
-                    <TableRow key={index} className="bg-red-50/50">
+                  {pagedViolations.map((ticket, index) => (
+                    <TableRow key={index} className={ticket.tempoResolucao !== null && ticket.tempoResolucao > 24 * 60 ? "bg-red-100/60" : "bg-red-50/50"}>
                       <TableCell className="text-sm">
                         {ticket.dataAberturaLocal.toLocaleDateString("pt-BR")}{" "}
                         <span className="text-muted-foreground">
                           {ticket.dataAberturaLocal.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </TableCell>
-                      <TableCell className="font-medium">{ticket.categoria}</TableCell>
+                      <TableCell className="font-medium text-sm">{ticket.categoria}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {ticket.responsavel || <span className="text-amber-600">Não atribuído</span>}
+                      </TableCell>
                       <TableCell className="text-right font-semibold text-red-700">
                         {ticket.tempoResolucao !== null ? formatTime(ticket.tempoResolucao) : "-"}
+                        {ticket.tempoResolucao !== null && ticket.tempoResolucao > 24 * 60 && (
+                          <span className="ml-1 text-xs bg-red-200 text-red-800 rounded px-1">crítico</span>
+                        )}
                       </TableCell>
-                      <TableCell 
+                      <TableCell
                         className="text-sm text-muted-foreground max-w-[400px]"
                         title={ticket.descricao}
                       >
@@ -247,6 +263,33 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
                   ))}
                 </TableBody>
               </Table>
+              {totalViolationPages > 1 && (
+                <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+                  <span>
+                    Página {violationsPage + 1} de {totalViolationPages} — {violations.length} violações no total
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setViolationsPage(p => p - 1)}
+                      disabled={violationsPage === 0}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setViolationsPage(p => p + 1)}
+                      disabled={violationsPage >= totalViolationPages - 1}
+                    >
+                      Próxima
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

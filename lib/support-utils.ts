@@ -63,10 +63,10 @@ export function calculateResolutionTime(abertura: string, encerrado: string | nu
   const start = new Date(abertura).getTime()
   const end = new Date(encerrado).getTime()
   const diffMinutes = (end - start) / (1000 * 60)
-  
-  // Filter out invalid data (negative or > 24h)
-  if (diffMinutes < 0 || diffMinutes > 24 * 60) return null
-  
+
+  // Filter out only clearly invalid data (negative or absurdly long > 30 days)
+  if (diffMinutes < 0 || diffMinutes > 30 * 24 * 60) return null
+
   return Math.round(diffMinutes)
 }
 
@@ -134,7 +134,8 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
 
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-  const hoje = tickets.filter(t => t.dataEncerradoLocal !== null && t.dataEncerradoLocal >= startOfDay).length
+  // Use dataAberturaLocal consistently for all period counts
+  const hoje = tickets.filter(t => t.dataAberturaLocal >= startOfDay).length
   const semana = tickets.filter(t => t.dataAberturaLocal >= startOfWeek).length
   const mes = tickets.filter(t => t.dataAberturaLocal >= startOfMonth).length
   
@@ -151,7 +152,13 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
     ? Math.round((times.filter(t => t <= SLA_TARGET).length / times.length) * 100)
     : 0
   const violacoesSLA = times.filter(t => t > SLA_TARGET).length
-  
+
+  // Critical tickets: resolution time > 24h
+  const criticalTickets = times.filter(t => t > 24 * 60).length
+
+  // Tickets without a responsável
+  const semResponsavel = tickets.filter(t => !t.responsavel).length
+
   // Resolution rate
   const encerrados = tickets.filter(t => t.situacao === "Encerrado").length
   const taxaResolucao = tickets.length > 0 ? Math.round((encerrados / tickets.length) * 100) : 0
@@ -187,7 +194,9 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
     taxaResolucao,
     categoriaMaisRecorrente,
     horaPico,
-    violacoesSLA
+    violacoesSLA,
+    criticalTickets,
+    semResponsavel
   }
 }
 
@@ -287,7 +296,7 @@ export function getDailyData(tickets: Ticket[], days: number = 30): DailyData[] 
     nextDate.setDate(nextDate.getDate() + 1)
     
     const dayTickets = tickets.filter(t =>
-      t.dataEncerradoLocal !== null && t.dataEncerradoLocal >= date && t.dataEncerradoLocal < nextDate
+      t.dataAberturaLocal >= date && t.dataAberturaLocal < nextDate
     )
     
     const ticketsWithTime = dayTickets.filter(t => t.tempoResolucao !== null)
@@ -314,7 +323,9 @@ export function getTimeDistribution(tickets: Ticket[]): TimeDistribution[] {
     { label: "30-60min", min: 30, max: 60, dentroSLA: true },
     { label: "1-2h", min: 60, max: 120, dentroSLA: true },
     { label: "2-4h", min: 120, max: 240, dentroSLA: false },
-    { label: ">4h", min: 240, max: Infinity, dentroSLA: false }
+    { label: "4-8h", min: 240, max: 480, dentroSLA: false },
+    { label: "8-24h", min: 480, max: 1440, dentroSLA: false },
+    { label: ">24h", min: 1440, max: Infinity, dentroSLA: false }
   ]
   
   const ticketsWithTime = tickets.filter(t => t.tempoResolucao !== null)
@@ -341,9 +352,14 @@ export function formatTime(minutes: number): string {
   if (minutes < 60) {
     return `${Math.round(minutes)}min`
   }
-  const hours = Math.floor(minutes / 60)
-  const mins = Math.round(minutes % 60)
-  return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`
+  if (minutes < 24 * 60) {
+    const hours = Math.floor(minutes / 60)
+    const mins = Math.round(minutes % 60)
+    return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`
+  }
+  const days = Math.floor(minutes / (24 * 60))
+  const hours = Math.floor((minutes % (24 * 60)) / 60)
+  return hours > 0 ? `${days}d ${hours}h` : `${days}d`
 }
 
 // Extract keywords for word cloud
@@ -426,6 +442,73 @@ export function getSLAColor(value: number, type: "tma" | "taxa"): "green" | "yel
   if (value >= 85) return "green"
   if (value >= 60) return "yellow"
   return "red"
+}
+
+// Filter tickets by responsável name ("TODOS" returns all)
+export function filterByResponsavel(tickets: Ticket[], responsavel: string): Ticket[] {
+  if (responsavel === "TODOS") return tickets
+  if (responsavel === "Não atribuído") return tickets.filter(t => !t.responsavel)
+  return tickets.filter(t => t.responsavel === responsavel)
+}
+
+// Filter tickets by a custom date range (uses dataAberturaLocal)
+export function filterByDateRange(tickets: Ticket[], from: Date, to: Date): Ticket[] {
+  const endOfTo = new Date(to)
+  endOfTo.setHours(23, 59, 59, 999)
+  return tickets.filter(t => t.dataAberturaLocal >= from && t.dataAberturaLocal <= endOfTo)
+}
+
+// Get sorted unique responsável names from all tickets
+export function getResponsaveis(tickets: Ticket[]): string[] {
+  const set = new Set<string>()
+  tickets.forEach(t => {
+    if (t.responsavel) set.add(t.responsavel)
+    else set.add("Não atribuído")
+  })
+  return Array.from(set).sort((a, b) => {
+    if (a === "Não atribuído") return 1
+    if (b === "Não atribuído") return -1
+    return a.localeCompare(b, "pt-BR")
+  })
+}
+
+// Export filtered tickets to a UTF-8 CSV file and trigger download
+export function exportToCSV(tickets: Ticket[], filename: string = "atendimentos.csv"): void {
+  const headers = [
+    "Data Abertura",
+    "Data Encerramento",
+    "Categoria",
+    "Grupo",
+    "Responsável",
+    "Situação",
+    "Tempo (min)",
+    "Descrição"
+  ]
+
+  const escape = (val: string) => `"${val.replace(/"/g, '""')}"`
+
+  const rows = tickets.map(t => [
+    escape(t.dataAberturaLocal.toLocaleString("pt-BR")),
+    escape(t.dataEncerradoLocal ? t.dataEncerradoLocal.toLocaleString("pt-BR") : ""),
+    escape(t.categoria),
+    escape(t.grupo),
+    escape(t.responsavel || "Não atribuído"),
+    escape(t.situacao),
+    t.tempoResolucao !== null ? t.tempoResolucao.toString() : "",
+    escape(t.descricao)
+  ])
+
+  const csvContent = [headers.join(";"), ...rows.map(r => r.join(";"))].join("\n")
+  const BOM = "\uFEFF"
+  const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 // Build AI context from data

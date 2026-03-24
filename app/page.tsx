@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import useSWR from "swr"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,10 @@ import {
   processTickets,
   filterByPeriod,
   filterByGroup,
+  filterByResponsavel,
+  filterByDateRange,
+  getResponsaveis,
+  exportToCSV,
   calculateKPIs,
   calculateCategoryStats,
   getHourlyDistribution,
@@ -25,7 +29,7 @@ import {
   getTimeDistribution,
   buildAIContext
 } from "@/lib/support-utils"
-import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut } from "lucide-react"
+import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2 } from "lucide-react"
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
@@ -33,14 +37,29 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [usuario, setUsuario] = useState("")
   const [senha, setSenha] = useState("")
   const [erro, setErro] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (usuario.toUpperCase() === "GUILHERME" && senha === "gui123") {
-      localStorage.setItem("crisdulabs_auth", "1")
-      onLogin()
-    } else {
-      setErro("Usuário ou senha incorretos.")
+    setErro("")
+    setLoading(true)
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario: usuario.toUpperCase(), senha }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        localStorage.setItem("crisdulabs_auth", "1")
+        onLogin()
+      } else {
+        setErro(data.mensagem || "Usuário ou senha incorretos.")
+      }
+    } catch {
+      setErro("Erro ao conectar com o servidor.")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -49,10 +68,7 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
       className="min-h-screen flex bg-cover bg-center bg-no-repeat relative"
       style={{ backgroundImage: "url('/wallpaper-login.jpg')" }}
     >
-      {/* overlay gradiente — escurece só a direita para destacar o form */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-black/20 to-black/70" />
-
-      {/* painel direito */}
       <div className="relative z-10 ml-auto flex flex-col justify-center px-16 py-12 w-full max-w-md min-h-screen">
         <div className="mb-8">
           <p className="text-white/50 text-xs uppercase tracking-widest mb-2">Dashboard de Suporte</p>
@@ -94,9 +110,10 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
 
           <Button
             type="submit"
+            disabled={loading}
             className="w-full h-12 rounded-xl bg-white text-slate-900 hover:bg-white/90 font-semibold text-sm tracking-wide mt-2"
           >
-            Entrar
+            {loading ? "Entrando..." : "Entrar"}
           </Button>
         </form>
 
@@ -112,6 +129,9 @@ export default function DashboardPage() {
   const [autenticado, setAutenticado] = useState<boolean | null>(null)
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("todos")
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("TODOS")
+  const [responsavelFilter, setResponsavelFilter] = useState<string>("TODOS")
+  const [dateFrom, setDateFrom] = useState<string>("")
+  const [dateTo, setDateTo] = useState<string>("")
   const [activeTab, setActiveTab] = useState("overview")
 
   useEffect(() => {
@@ -124,19 +144,77 @@ export default function DashboardPage() {
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
 
+  // Progressive background loading
+  const [accumulatedItems, setAccumulatedItems] = useState<TicketRaw[]>([])
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const sessionRef = useRef(0) // cancela fetches obsoletos ao atualizar
+
+  useEffect(() => {
+    if (!data?.success || !data.items) return
+
+    // Nova carga (inicial ou refresh) — reinicia os itens acumulados
+    const sessionId = ++sessionRef.current
+    setAccumulatedItems(data.items as TicketRaw[])
+
+    if (!data.hasMore || !data.nextOffset) {
+      setIsLoadingMore(false)
+      return
+    }
+
+    // Inicia busca em background para os lotes restantes
+    setIsLoadingMore(true)
+    let offset: number = data.nextOffset
+
+    const fetchMore = async () => {
+      while (true) {
+        if (sessionRef.current !== sessionId) break // refresh chamado, para
+        try {
+          const res = await fetch(`/api/support?offset=${offset}`)
+          const batch = await res.json()
+          if (sessionRef.current !== sessionId) break
+          if (batch.success && batch.items?.length > 0) {
+            setAccumulatedItems(prev => [...prev, ...(batch.items as TicketRaw[])])
+          }
+          if (batch.hasMore && batch.nextOffset) {
+            offset = batch.nextOffset
+          } else {
+            break
+          }
+        } catch {
+          break
+        }
+      }
+      if (sessionRef.current === sessionId) setIsLoadingMore(false)
+    }
+
+    fetchMore()
+  }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Process raw tickets
   const allTickets = useMemo<Ticket[]>(() => {
-    if (!data?.items || !Array.isArray(data.items)) return []
-    return processTickets(data.items as TicketRaw[])
-  }, [data?.items])
+    if (!accumulatedItems.length) return []
+    return processTickets(accumulatedItems)
+  }, [accumulatedItems])
+
+  // Responsáveis list (from all tickets, unfiltered)
+  const responsaveis = useMemo(() => getResponsaveis(allTickets), [allTickets])
 
   // Apply filters
   const filteredTickets = useMemo(() => {
     let tickets = allTickets
     tickets = filterByGroup(tickets, groupFilter)
-    tickets = filterByPeriod(tickets, periodFilter)
+    if (responsavelFilter !== "TODOS") {
+      tickets = filterByResponsavel(tickets, responsavelFilter)
+    }
+    if (periodFilter === "personalizado") {
+      if (dateFrom && dateTo) {
+        tickets = filterByDateRange(tickets, new Date(dateFrom), new Date(dateTo))
+      }
+    } else {
+      tickets = filterByPeriod(tickets, periodFilter)
+    }
     return tickets
-  }, [allTickets, periodFilter, groupFilter])
+  }, [allTickets, periodFilter, groupFilter, responsavelFilter, dateFrom, dateTo])
 
   // Calculate metrics
   const kpis = useMemo(() => calculateKPIs(filteredTickets), [filteredTickets])
@@ -164,8 +242,35 @@ export default function DashboardPage() {
   }, [data?.timestamp])
 
   const handleRefresh = useCallback(() => {
+    sessionRef.current++ // cancela qualquer fetch em background
+    setAccumulatedItems([])
+    setIsLoadingMore(false)
     mutate()
   }, [mutate])
+
+  const handleExportCSV = useCallback(() => {
+    const now = new Date().toLocaleDateString("pt-BR").replace(/\//g, "-")
+    exportToCSV(filteredTickets, `atendimentos_${now}.csv`)
+  }, [filteredTickets])
+
+  const handlePeriodChange = (value: string) => {
+    setPeriodFilter(value as PeriodFilter)
+    // Reset date range when switching away from personalizado
+    if (value !== "personalizado") {
+      setDateFrom("")
+      setDateTo("")
+    }
+  }
+
+  const periodLabel = useMemo(() => {
+    switch (periodFilter) {
+      case "hoje": return "Hoje"
+      case "semana": return "Esta Semana"
+      case "mes": return "Este Mês"
+      case "personalizado": return dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : "Personalizado"
+      default: return "Todos"
+    }
+  }, [periodFilter, dateFrom, dateTo])
 
   if (autenticado === null) return null
   if (!autenticado) return <LoginPage onLogin={() => setAutenticado(true)} />
@@ -175,56 +280,121 @@ export default function DashboardPage() {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold text-slate-900">
-                Dashboard de Suporte - CrisduLabs
-              </h1>
-              {lastUpdate && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Ultima atualizacao: {lastUpdate}
-                </p>
-              )}
+          <div className="flex flex-col gap-3">
+            {/* Row 1: title + controls */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-xl font-semibold text-slate-900">
+                  Dashboard de Suporte - CrisduLabs
+                </h1>
+                {lastUpdate && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ultima atualizacao: {lastUpdate}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Grupo */}
+                <Select value={groupFilter} onValueChange={(v) => setGroupFilter(v as GroupFilter)}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Grupo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Todos</SelectItem>
+                    <SelectItem value="SISTEMAS">Sistemas</SelectItem>
+                    <SelectItem value="CIT">CIT</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Responsável */}
+                <Select value={responsavelFilter} onValueChange={setResponsavelFilter}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Todos responsáveis</SelectItem>
+                    {responsaveis.map(r => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Período */}
+                <Select value={periodFilter} onValueChange={handlePeriodChange}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Periodo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hoje">Hoje</SelectItem>
+                    <SelectItem value="semana">Esta Semana</SelectItem>
+                    <SelectItem value="mes">Este Mês</SelectItem>
+                    <SelectItem value="personalizado">Personalizado</SelectItem>
+                    <SelectItem value="todos">Todos</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Export CSV */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleExportCSV}
+                  disabled={filteredTickets.length === 0}
+                  title="Exportar CSV"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+
+                {/* Refresh */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  title="Atualizar dados"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                </Button>
+
+                {/* Logout */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Sair"
+                  onClick={() => { localStorage.removeItem("crisdulabs_auth"); setAutenticado(false) }}
+                >
+                  <LogOut className="h-4 w-4 text-slate-500" />
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Select value={groupFilter} onValueChange={(v) => setGroupFilter(v as GroupFilter)}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Grupo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TODOS">Todos</SelectItem>
-                  <SelectItem value="SISTEMAS">Sistemas</SelectItem>
-                  <SelectItem value="CIT">CIT</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={periodFilter} onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Periodo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="hoje">Hoje</SelectItem>
-                  <SelectItem value="semana">Esta Semana</SelectItem>
-                  <SelectItem value="mes">Este Mes</SelectItem>
-                  <SelectItem value="todos">Todos</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isLoading}
-              >
-                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Sair"
-                onClick={() => { localStorage.removeItem("crisdulabs_auth"); setAutenticado(false) }}
-              >
-                <LogOut className="h-4 w-4 text-slate-500" />
-              </Button>
-            </div>
+
+            {/* Row 2: date range inputs (only when periodFilter === "personalizado") */}
+            {periodFilter === "personalizado" && (
+              <div className="flex flex-wrap items-center gap-3 pb-1">
+                <span className="text-sm text-muted-foreground font-medium">Intervalo:</span>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground">De</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={e => setDateFrom(e.target.value)}
+                    className="border border-slate-200 rounded-md px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground">Até</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom}
+                    onChange={e => setDateTo(e.target.value)}
+                    className="border border-slate-200 rounded-md px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                {(!dateFrom || !dateTo) && (
+                  <span className="text-xs text-amber-600">Selecione as duas datas para filtrar</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -247,8 +417,8 @@ export default function DashboardPage() {
             <p className="text-red-600 text-sm mt-1">
               {error.message || "Falha na conexao com o servidor"}
             </p>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="mt-4"
               onClick={handleRefresh}
             >
@@ -262,22 +432,44 @@ export default function DashboardPage() {
           <>
             {/* Summary Bar */}
             <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
-              <div className="flex flex-wrap items-center gap-4 text-sm">
-                <span className="font-medium text-slate-700">
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="font-medium text-slate-700 flex items-center gap-2">
                   {filteredTickets.length.toLocaleString("pt-BR")} atendimentos
+                  {isLoadingMore && (
+                    <span className="flex items-center gap-1 text-xs text-slate-400 font-normal">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      carregando mais...
+                    </span>
+                  )}
                 </span>
-                <span className="text-slate-400">|</span>
+                <span className="text-slate-300">|</span>
                 <span className="text-muted-foreground">
                   Grupo: <strong>{groupFilter === "TODOS" ? "Todos" : groupFilter}</strong>
                 </span>
-                <span className="text-slate-400">|</span>
+                <span className="text-slate-300">|</span>
                 <span className="text-muted-foreground">
-                  Periodo: <strong>
-                    {periodFilter === "hoje" ? "Hoje" : 
-                     periodFilter === "semana" ? "Esta Semana" :
-                     periodFilter === "mes" ? "Este Mes" : "Todos"}
-                  </strong>
+                  Responsável: <strong>{responsavelFilter === "TODOS" ? "Todos" : responsavelFilter}</strong>
                 </span>
+                <span className="text-slate-300">|</span>
+                <span className="text-muted-foreground">
+                  Período: <strong>{periodLabel}</strong>
+                </span>
+                {kpis.semResponsavel > 0 && (
+                  <>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-amber-600 font-medium">
+                      ⚠ {kpis.semResponsavel} sem responsável
+                    </span>
+                  </>
+                )}
+                {kpis.criticalTickets > 0 && (
+                  <>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-red-600 font-medium">
+                      🔴 {kpis.criticalTickets} casos críticos (+24h)
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -307,7 +499,7 @@ export default function DashboardPage() {
               </TabsList>
 
               <TabsContent value="overview" className="mt-6">
-                <OverviewTab 
+                <OverviewTab
                   tickets={filteredTickets}
                   kpis={kpis}
                   hourlyData={hourlyData}
@@ -316,21 +508,21 @@ export default function DashboardPage() {
               </TabsContent>
 
               <TabsContent value="ranking" className="mt-6">
-                <RankingTab 
+                <RankingTab
                   tickets={filteredTickets}
                   categoryStats={categoryStats}
                 />
               </TabsContent>
 
               <TabsContent value="recurrent" className="mt-6">
-                <RecurrentTab 
+                <RecurrentTab
                   tickets={filteredTickets}
                   categoryStats={categoryStats}
                 />
               </TabsContent>
 
               <TabsContent value="sla" className="mt-6">
-                <SLATab 
+                <SLATab
                   tickets={filteredTickets}
                   kpis={kpis}
                   dailyData={dailyData}
