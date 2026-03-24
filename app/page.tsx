@@ -31,27 +31,7 @@ import {
 } from "@/lib/support-utils"
 import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2 } from "lucide-react"
 
-const BASE_API = "https://sistema.romancemoda.com.br/apex/romance/company/suporte/"
-
-async function fetchAllTickets(): Promise<{ items: TicketRaw[] }> {
-  const allItems: TicketRaw[] = []
-  let offset = 0
-  let hasMore = true
-
-  while (hasMore && offset <= 10000) {
-    const url = offset === 0 ? BASE_API : `${BASE_API}?offset=${offset}`
-    const res = await fetch(url, { headers: { Accept: "application/json" } })
-    if (!res.ok) throw new Error(`Erro ${res.status}`)
-    const data = await res.json()
-    if (data.items) allItems.push(...data.items)
-    hasMore = data.hasMore === true
-    offset += 25
-  }
-
-  return { items: allItems }
-}
-
-const fetcher = () => fetchAllTickets()
+const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [usuario, setUsuario] = useState("")
@@ -159,7 +139,7 @@ export default function DashboardPage() {
   }, [])
 
   const { data, error, isLoading, mutate } = useSWR(
-    autenticado ? "support-tickets" : null,
+    autenticado ? "/api/support" : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
@@ -170,7 +150,7 @@ export default function DashboardPage() {
   const sessionRef = useRef(0) // cancela fetches obsoletos ao atualizar
 
   useEffect(() => {
-    if (!data?.success || !data.items) return
+    if (!data?.items || !Array.isArray(data.items)) return
 
     // Nova carga (inicial ou refresh) — reinicia os itens acumulados
     const sessionId = ++sessionRef.current
@@ -250,15 +230,16 @@ export default function DashboardPage() {
 
   // Format timestamp
   const lastUpdate = useMemo(() => {
-    if (!data) return null
-    return new Date().toLocaleString("pt-BR", {
+    if (!data?.timestamp) return null
+    const date = new Date(data.timestamp)
+    return date.toLocaleString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit"
     })
-  }, [data])
+  }, [data?.timestamp])
 
   const handleRefresh = useCallback(() => {
     sessionRef.current++ // cancela qualquer fetch em background
