@@ -7,10 +7,10 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Cell, ComposedChart, Legend } from "recharts"
 import { KPICard } from "./kpi-card"
 import type { Ticket, KPIData, DailyData, TimeDistribution } from "@/lib/support-types"
-import { formatTime, truncateText, getSLAColor, getSLAViolations } from "@/lib/support-utils"
-import { Clock, Target, AlertTriangle, Zap, TrendingUp } from "lucide-react"
+import { formatTime, truncateText, getSLAColor, getBacklogColor, getSLAViolations } from "@/lib/support-utils"
+import { Clock, Target, AlertTriangle, Zap, TrendingUp, Inbox, GitBranch, BarChart2 } from "lucide-react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { SLA_TARGET_MINUTES, SLA_RATE_TARGET, CHART_COLOR_PRIMARY, CHART_COLOR_SECONDARY } from "@/lib/constants"
+import { SLA_TARGET_MINUTES, SLA_RATE_TARGET, CHART_COLOR_PRIMARY, CHART_COLOR_SECONDARY, FCR_TARGET } from "@/lib/constants"
 
 interface SLATabProps {
   tickets: Ticket[]
@@ -86,6 +86,31 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
           subtitle="Resolvidos em < 15min"
           icon={<Zap className="h-4 w-4" />}
           status={kpis.quickWins >= 30 ? "green" : kpis.quickWins >= 15 ? "yellow" : "red"}
+        />
+      </div>
+
+      {/* ITIL KPIs adicionais */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <KPICard
+          title="Backlog (ITIL)"
+          value={kpis.backlog.toString()}
+          subtitle={`${kpis.taxaBacklog}% do total em aberto`}
+          icon={<Inbox className="h-4 w-4" />}
+          status={getBacklogColor(kpis.backlog)}
+        />
+        <KPICard
+          title="Taxa de Escalação"
+          value={`${kpis.taxaEscalacao}%`}
+          subtitle="Em Aguardando Aprovação"
+          icon={<GitBranch className="h-4 w-4" />}
+          status={kpis.taxaEscalacao <= 5 ? "green" : kpis.taxaEscalacao <= 15 ? "yellow" : "red"}
+        />
+        <KPICard
+          title="Média Diária"
+          value={kpis.mediaDiariaTickets.toString()}
+          subtitle={`Tickets/dia · FCR meta: ${FCR_TARGET}%`}
+          icon={<BarChart2 className="h-4 w-4" />}
+          status="green"
         />
       </div>
 

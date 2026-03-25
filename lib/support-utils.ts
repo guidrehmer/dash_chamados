@@ -1,5 +1,12 @@
 import type { Ticket, TicketRaw, CategoryStats, ResponsavelStats, HourlyData, DailyData, TimeDistribution, KPIData, PeriodFilter, GroupFilter, Categoria } from "./support-types"
-import { SLA_TARGET_MINUTES as SLA_TARGET, KEYWORD_MIN_COUNT } from "./constants"
+import {
+  SLA_TARGET_MINUTES as SLA_TARGET,
+  KEYWORD_MIN_COUNT,
+  TMA_GREEN_MAX,
+  TMA_YELLOW_MAX,
+  SLA_RATE_TARGET,
+  SLA_RATE_WARNING,
+} from "./constants"
 
 // Stop words to remove from word cloud
 const STOP_WORDS = new Set([
@@ -46,6 +53,57 @@ export function categorizeTicket(descricao: string): Categoria {
   if (desc.includes("semana") || desc.includes("campanha") || desc.includes("week")) {
     return "Semanas / Campanha"
   }
+
+  // ── Categorias adicionais para reduzir "Outros" ───────────────────────────
+  if (
+    desc.includes("erro") || desc.includes("falha") || desc.includes("bug") ||
+    desc.includes("travad") || desc.includes("travar") || desc.includes("trava ") ||
+    desc.includes("lento") || desc.includes("lentidão") || desc.includes("lentidao") ||
+    desc.includes("não funciona") || desc.includes("nao funciona") ||
+    desc.includes("crash") || desc.includes("parou") || desc.includes("caiu")
+  ) {
+    return "Erro / Falha do Sistema"
+  }
+  if (
+    desc.includes("relat") || desc.includes("consulta") || desc.includes("extrato") ||
+    desc.includes("histórico") || desc.includes("historico") || desc.includes("exportar") ||
+    desc.includes("exportação") || desc.includes("exportacao") || desc.includes("visualizar") ||
+    (desc.includes("gerar") && !desc.includes("gerando"))
+  ) {
+    return "Relatório / Consulta"
+  }
+  if (
+    desc.includes("fatur") || desc.includes("financeiro") || desc.includes("boleto") ||
+    desc.includes("nfe") || desc.includes("nota fiscal") || desc.includes("xml") ||
+    desc.includes("fiscal") || desc.includes("pagamento") || desc.includes("cobrança") ||
+    desc.includes("cobranca") || desc.includes("duplicata")
+  ) {
+    return "Financeiro / Faturamento"
+  }
+  if (
+    desc.includes("impressora") || desc.includes("imprimir") || desc.includes("impressão") ||
+    desc.includes("impressao") || desc.includes("hardware") || desc.includes("equipamento") ||
+    desc.includes("computador") || desc.includes("scanner") || desc.includes("leitor")
+  ) {
+    return "Impressão / Hardware"
+  }
+  if (
+    desc.includes("configur") || desc.includes("parametr") || desc.includes("instalar") ||
+    desc.includes("instalação") || desc.includes("instalacao") || desc.includes("setup") ||
+    desc.includes("atualizar") || desc.includes("atualização") || desc.includes("atualizacao") ||
+    desc.includes("versão") || desc.includes("versao")
+  ) {
+    return "Configuração / Parametrização"
+  }
+  if (
+    desc.includes("dúvida") || desc.includes("duvida") || desc.includes("treinamento") ||
+    desc.includes("como fazer") || desc.includes("como usar") || desc.includes("como uso") ||
+    desc.includes("tutorial") || desc.includes("ajuda") || desc.includes("orientação") ||
+    desc.includes("orientacao") || desc.includes("instrução") || desc.includes("instrucao")
+  ) {
+    return "Dúvida / Treinamento"
+  }
+
   return "Outros"
 }
 
@@ -160,6 +218,19 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
   // Resolution rate
   const encerrados = tickets.filter(t => t.situacao === "Encerrado").length
   const taxaResolucao = tickets.length > 0 ? Math.round((encerrados / tickets.length) * 100) : 0
+
+  // ── ITIL KPIs adicionais ──────────────────────────────────────────────────
+  // Backlog: tickets ainda não encerrados
+  const backlog = tickets.filter(t => t.situacao !== "Encerrado").length
+  const taxaBacklog = tickets.length > 0 ? Math.round((backlog / tickets.length) * 100) : 0
+
+  // Taxa de escalação: proxy via "Aguardando Aprovação"
+  const aguardando = tickets.filter(t => t.situacao === "Aguardando Aprovação").length
+  const taxaEscalacao = tickets.length > 0 ? Math.round((aguardando / tickets.length) * 100) : 0
+
+  // Média diária de tickets (usando dias distintos no conjunto)
+  const uniqueDays = new Set(tickets.map(t => t.dataAberturaLocal.toDateString())).size
+  const mediaDiariaTickets = uniqueDays > 0 ? Math.round(tickets.length / uniqueDays) : 0
   
   // Most common category
   const categoryCount: Record<string, number> = {}
@@ -194,7 +265,11 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
     horaPico,
     violacoesSLA,
     criticalTickets,
-    semResponsavel
+    semResponsavel,
+    backlog,
+    taxaBacklog,
+    taxaEscalacao,
+    mediaDiariaTickets,
   }
 }
 
@@ -429,16 +504,24 @@ export function truncateText(text: string, maxLength: number): string {
   return text.substring(0, maxLength) + "..."
 }
 
-// Get SLA status color
+// Get SLA status color — thresholds driven by lib/constants.ts
 export function getSLAColor(value: number, type: "tma" | "taxa"): "green" | "yellow" | "red" {
   if (type === "tma") {
-    if (value <= 60) return "green"
-    if (value <= 120) return "yellow"
+    if (value <= TMA_GREEN_MAX)  return "green"
+    if (value <= TMA_YELLOW_MAX) return "yellow"
     return "red"
   }
-  // taxa
-  if (value >= 85) return "green"
-  if (value >= 60) return "yellow"
+  // taxa de SLA
+  if (value >= SLA_RATE_TARGET)  return "green"
+  if (value >= SLA_RATE_WARNING) return "yellow"
+  return "red"
+}
+
+// Get backlog status color
+export function getBacklogColor(backlog: number): "green" | "yellow" | "red" {
+  // imported inline to avoid circular dependency
+  if (backlog <= 30)  return "green"
+  if (backlog <= 60)  return "yellow"
   return "red"
 }
 
@@ -541,17 +624,26 @@ export function buildAIContext(tickets: Ticket[], kpis: KPIData, categoryStats: 
     descricao: truncateText(t.descricao, 100)
   }))
   
-  return `Você é um especialista em análise de suporte de TI e sistemas. 
-Analise os dados abaixo e responda em português brasileiro de forma objetiva, 
+  return `Você é um especialista em análise de suporte de TI e sistemas (ITIL).
+Analise os dados abaixo e responda em português brasileiro de forma objetiva,
 direta e acionável, com bullet points e destaques em negrito quando relevante.
 
 RESUMO DOS DADOS DO SUPORTE — CrisduLabs
 - Total de atendimentos: ${kpis.total}
 - Período dos dados: ${dataRange}
 - Atendimentos hoje: ${kpis.hoje} | esta semana: ${kpis.semana} | este mês: ${kpis.mes}
-- Tempo Médio de Atendimento (TMA): ${kpis.tma} minutos
-- Taxa de cumprimento SLA (meta 2h): ${kpis.taxaSLA}%
-- Total violações de SLA: ${kpis.violacoesSLA}
+- Média diária de tickets: ${kpis.mediaDiariaTickets}
+── KPIs ITIL ──
+- MTTR / TMA (Tempo Médio de Resolução): ${kpis.tma} min (meta: 120 min)
+- Taxa SLA (% resolvidos no prazo): ${kpis.taxaSLA}% (meta: 85%)
+- Violações de SLA: ${kpis.violacoesSLA}
+- Backlog atual (tickets em aberto): ${kpis.backlog} (${kpis.taxaBacklog}% do total)
+- Taxa de Escalação (Aguardando Aprovação): ${kpis.taxaEscalacao}%
+- Tickets críticos (>24h): ${kpis.criticalTickets}
+- Quick Wins (<15min): ${kpis.quickWins}%
+- Taxa de resolução geral: ${kpis.taxaResolucao}%
+- Tickets sem responsável: ${kpis.semResponsavel}
+── Distribuição ──
 - Categoria mais frequente: ${kpis.categoriaMaisRecorrente.nome} (${kpis.categoriaMaisRecorrente.percentual}%)
 - Distribuição por categoria: ${categoriesJson}
 - Distribuição por hora do dia: ${hoursJson}

@@ -1,8 +1,29 @@
-// ─── SLA ─────────────────────────────────────────────────────────────────────
+// ─── SLA / ITIL KPIs ──────────────────────────────────────────────────────────
+/** MTTR — Meta de Tempo Médio de Resolução (Mean Time To Resolve) */
 export const SLA_TARGET_MINUTES = 120
-export const SLA_RATE_TARGET = 85      // % mínimo de atendimentos dentro do SLA
+export const MTTR_TARGET_MINUTES = 120  // alias semântico ITIL
+
+/** Taxa de cumprimento de SLA — metas verde / amarelo / vermelho */
+export const SLA_RATE_TARGET  = 85  // % ≥ este valor: verde
+export const SLA_RATE_WARNING = 70  // % ≥ este valor: amarelo; abaixo: vermelho
+
+/** TMA — faixas de cor (verde / amarelo / vermelho) */
+export const TMA_GREEN_MAX  = 60   // minutos — TMA ≤ 60 min: verde
+export const TMA_YELLOW_MAX = 120  // minutos — TMA 61-120 min: amarelo; >120: vermelho
+
+/** FCR — First Call Resolution: meta percentual */
+export const FCR_TARGET = 80       // % de tickets resolvidos sem reabertura (referência ITIL)
+
+/** Backlog — limite de alerta para tickets em aberto */
+export const BACKLOG_WARNING_COUNT = 30  // acima deste número emite alerta amarelo
+export const BACKLOG_CRITICAL_COUNT = 60 // acima deste número emite alerta vermelho
+
+/** Quick Wins & Críticos */
 export const QUICK_WIN_THRESHOLD = 15  // minutos — atendimentos "quick win"
 export const CRITICAL_HOURS = 24       // horas — atendimentos críticos (+24h abertos)
+
+/** Tempo máximo válido para considerar uma resolução (em dias) */
+export const MAX_RESOLUTION_DAYS = 30
 
 // ─── Paginação / limites de tabela ───────────────────────────────────────────
 export const VIOLATIONS_PER_PAGE = 20

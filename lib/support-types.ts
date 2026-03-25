@@ -38,7 +38,7 @@ export interface KPIData {
   hoje: number
   semana: number
   mes: number
-  tma: number // tempo medio atendimento em minutos
+  tma: number // tempo medio atendimento em minutos (= MTTR ITIL)
   taxaSLA: number // percentual
   tempoMaximo: number
   quickWins: number // percentual < 15min
@@ -48,6 +48,11 @@ export interface KPIData {
   violacoesSLA: number
   criticalTickets: number // tickets que levaram mais de 24h
   semResponsavel: number  // tickets sem responsável atribuído
+  // ── KPIs ITIL adicionais ───────────────────────────────────────────────────
+  backlog: number          // tickets ainda não encerrados (Aberto + Em Atendimento + Aguardando)
+  taxaBacklog: number      // % de tickets em aberto sobre o total
+  taxaEscalacao: number    // % de tickets em "Aguardando Aprovação" (proxy de escalação)
+  mediaDiariaTickets: number // média de tickets abertos por dia no período
 }
 
 export interface CategoryStats {
@@ -86,6 +91,13 @@ export const CATEGORIAS = [
   "Liberação / Permissão",
   "Cadastro",
   "Semanas / Campanha",
+  // ── Novas categorias (reduzem "Outros") ───────────────────────────────────
+  "Erro / Falha do Sistema",
+  "Relatório / Consulta",
+  "Financeiro / Faturamento",
+  "Impressão / Hardware",
+  "Configuração / Parametrização",
+  "Dúvida / Treinamento",
   "Outros"
 ] as const
 
