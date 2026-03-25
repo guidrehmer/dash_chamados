@@ -13,6 +13,7 @@ import { RankingTab } from "@/components/dashboard/ranking-tab"
 import { RecurrentTab } from "@/components/dashboard/recurrent-tab"
 import { SLATab } from "@/components/dashboard/sla-tab"
 import { AITab } from "@/components/dashboard/ai-tab"
+import { AnalysisTab } from "@/components/dashboard/analysis-tab"
 import type { TicketRaw, Ticket, PeriodFilter, GroupFilter } from "@/lib/support-types"
 import {
   processTickets,
@@ -29,7 +30,7 @@ import {
   getTimeDistribution,
   buildAIContext
 } from "@/lib/support-utils"
-import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2 } from "lucide-react"
+import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2, LineChart } from "lucide-react"
 import { FETCH_MAX_RETRIES, FETCH_RETRY_BASE_MS } from "@/lib/constants"
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
@@ -515,6 +516,10 @@ export default function DashboardPage() {
                   <Bot className="h-4 w-4" />
                   <span className="hidden sm:inline">IA</span>
                 </TabsTrigger>
+                <TabsTrigger value="analysis" className="gap-2">
+                  <LineChart className="h-4 w-4" />
+                  <span className="hidden sm:inline">Análises</span>
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="mt-6">
@@ -551,6 +556,10 @@ export default function DashboardPage() {
 
               <TabsContent value="ai" className="mt-6">
                 <AITab systemPrompt={aiContext} />
+              </TabsContent>
+
+              <TabsContent value="analysis" className="mt-6">
+                <AnalysisTab />
               </TabsContent>
             </Tabs>
           </>

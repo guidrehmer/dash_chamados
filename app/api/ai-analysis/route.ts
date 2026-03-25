@@ -4,7 +4,7 @@ const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 export async function POST(request: NextRequest) {
   try {
-    const { systemPrompt, userMessage } = await request.json()
+    const { systemPrompt, userMessage, maxTokens } = await request.json()
 
     if (!systemPrompt || !userMessage) {
       return NextResponse.json(
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1500,
+        max_tokens: typeof maxTokens === "number" && maxTokens > 0 ? Math.min(maxTokens, 8000) : 1500,
         system: systemPrompt,
         messages: [
           {
