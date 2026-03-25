@@ -10,6 +10,7 @@ import { StatusBadge } from "./status-badge"
 import type { Ticket, KPIData, HourlyData, DailyData } from "@/lib/support-types"
 import { formatTime, getSLAColor } from "@/lib/support-utils"
 import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2, UserX, ShieldAlert } from "lucide-react"
+import { STATUS_COLORS, CHART_COLOR_PRIMARY, RECENT_TICKETS_LIMIT } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -70,17 +71,10 @@ interface OverviewTabProps {
   dailyData: DailyData[]
 }
 
-const STATUS_COLORS = {
-  "Encerrado": "#10b981",
-  "Em Atendimento": "#3b82f6",
-  "Aguardando Aprovação": "#f59e0b",
-  "Aberto": "#6b7280"
-}
-
 const chartConfig = {
   quantidade: {
     label: "Quantidade",
-    color: "#1a56db"
+    color: CHART_COLOR_PRIMARY
   },
   encerrado: {
     label: "Encerrado",
@@ -137,7 +131,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
     return [...tickets]
       .filter(t => t.dataEncerradoLocal !== null)
       .sort((a, b) => b.dataEncerradoLocal!.getTime() - a.dataEncerradoLocal!.getTime())
-      .slice(0, 20)
+      .slice(0, RECENT_TICKETS_LIMIT)
   }, [tickets])
 
   const hourlyChartData = useMemo(() => {

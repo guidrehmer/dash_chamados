@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -8,8 +8,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Cell, Comp
 import { KPICard } from "./kpi-card"
 import type { Ticket, KPIData, DailyData, TimeDistribution } from "@/lib/support-types"
 import { formatTime, truncateText, getSLAColor, getSLAViolations } from "@/lib/support-utils"
-import { Clock, Target, AlertTriangle, Zap, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Clock, Target, AlertTriangle, Zap, TrendingUp } from "lucide-react"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { SLA_TARGET_MINUTES, SLA_RATE_TARGET, CHART_COLOR_PRIMARY, CHART_COLOR_SECONDARY } from "@/lib/constants"
 
 interface SLATabProps {
   tickets: Ticket[]
@@ -21,24 +22,24 @@ interface SLATabProps {
 const chartConfig = {
   quantidade: {
     label: "Quantidade",
-    color: "#1a56db"
+    color: CHART_COLOR_PRIMARY
   },
   tma: {
     label: "TMA (min)",
-    color: "#f59e0b"
+    color: CHART_COLOR_SECONDARY
   }
 }
 
-const VIOLATIONS_PER_PAGE = 20
 
 export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabProps) {
   const violations = useMemo(() => getSLAViolations(tickets), [tickets])
-  const [violationsPage, setViolationsPage] = useState(0)
-  const totalViolationPages = Math.ceil(violations.length / VIOLATIONS_PER_PAGE)
-  const pagedViolations = violations.slice(
-    violationsPage * VIOLATIONS_PER_PAGE,
-    (violationsPage + 1) * VIOLATIONS_PER_PAGE
-  )
+  const violationsParentRef = useRef<HTMLDivElement>(null)
+  const violationsVirtualizer = useVirtualizer({
+    count: violations.length,
+    getScrollElement: () => violationsParentRef.current,
+    estimateSize: () => 48,
+    overscan: 8,
+  })
 
   const dailyTMAData = useMemo(() => {
     return dailyData.map(d => ({
@@ -61,14 +62,14 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
         <KPICard
           title="Tempo Medio (TMA)"
           value={formatTime(kpis.tma)}
-          subtitle="Meta: 120min"
+          subtitle={`Meta: ${SLA_TARGET_MINUTES}min`}
           icon={<Clock className="h-4 w-4" />}
           status={getSLAColor(kpis.tma, "tma")}
         />
         <KPICard
           title="Taxa de SLA"
           value={`${kpis.taxaSLA}%`}
-          subtitle="Meta: 85%"
+          subtitle={`Meta: ${SLA_RATE_TARGET}%`}
           icon={<Target className="h-4 w-4" />}
           status={getSLAColor(kpis.taxaSLA, "taxa")}
         />
@@ -224,6 +225,7 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
             </div>
           ) : (
             <div className="overflow-x-auto">
+              {/* Cabeçalho fixo */}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -234,62 +236,57 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
                     <TableHead>Descricao</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {pagedViolations.map((ticket, index) => (
-                    <TableRow key={index} className={ticket.tempoResolucao !== null && ticket.tempoResolucao > 24 * 60 ? "bg-red-100/60" : "bg-red-50/50"}>
-                      <TableCell className="text-sm">
-                        {ticket.dataAberturaLocal.toLocaleDateString("pt-BR")}{" "}
-                        <span className="text-muted-foreground">
-                          {ticket.dataAberturaLocal.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-medium text-sm">{ticket.categoria}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {ticket.responsavel || <span className="text-amber-600">Não atribuído</span>}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-red-700">
-                        {ticket.tempoResolucao !== null ? formatTime(ticket.tempoResolucao) : "-"}
-                        {ticket.tempoResolucao !== null && ticket.tempoResolucao > 24 * 60 && (
-                          <span className="ml-1 text-xs bg-red-200 text-red-800 rounded px-1">crítico</span>
-                        )}
-                      </TableCell>
-                      <TableCell
-                        className="text-sm text-muted-foreground max-w-[400px]"
-                        title={ticket.descricao}
-                      >
-                        {truncateText(ticket.descricao, 100)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
               </Table>
-              {totalViolationPages > 1 && (
-                <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-                  <span>
-                    Página {violationsPage + 1} de {totalViolationPages} — {violations.length} violações no total
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setViolationsPage(p => p - 1)}
-                      disabled={violationsPage === 0}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Anterior
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setViolationsPage(p => p + 1)}
-                      disabled={violationsPage >= totalViolationPages - 1}
-                    >
-                      Próxima
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
+              {/* Corpo com scroll virtual — máx. 480px de altura */}
+              <div
+                ref={violationsParentRef}
+                className="overflow-y-auto border-t"
+                style={{ maxHeight: 480 }}
+              >
+                <div style={{ height: violationsVirtualizer.getTotalSize(), position: "relative" }}>
+                  {violationsVirtualizer.getVirtualItems().map(virtualRow => {
+                    const ticket = violations[virtualRow.index]
+                    const isCritical = ticket.tempoResolucao !== null && ticket.tempoResolucao > 24 * 60
+                    return (
+                      <div
+                        key={virtualRow.key}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: virtualRow.size,
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                        className={`flex items-center text-sm border-b ${isCritical ? "bg-red-100/60" : "bg-red-50/50"}`}
+                      >
+                        <div className="w-[140px] shrink-0 px-4 py-2">
+                          {ticket.dataAberturaLocal.toLocaleDateString("pt-BR")}{" "}
+                          <span className="text-muted-foreground">
+                            {ticket.dataAberturaLocal.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <div className="w-[150px] shrink-0 px-4 font-medium">{ticket.categoria}</div>
+                        <div className="w-[140px] shrink-0 px-4 text-muted-foreground">
+                          {ticket.responsavel || <span className="text-amber-600">Não atribuído</span>}
+                        </div>
+                        <div className="w-[100px] shrink-0 px-4 text-right font-semibold text-red-700">
+                          {ticket.tempoResolucao !== null ? formatTime(ticket.tempoResolucao) : "-"}
+                          {isCritical && (
+                            <span className="ml-1 text-xs bg-red-200 text-red-800 rounded px-1">crítico</span>
+                          )}
+                        </div>
+                        <div className="flex-1 px-4 text-muted-foreground truncate" title={ticket.descricao}>
+                          {truncateText(ticket.descricao, 100)}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 text-right">
+                {violations.length} violações — role para ver mais
+              </p>
             </div>
           )}
         </CardContent>

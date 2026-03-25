@@ -9,6 +9,7 @@ import type { Ticket, CategoryStats } from "@/lib/support-types"
 import { formatTime, getWeekComparison, calculateResponsavelStats } from "@/lib/support-utils"
 import { TrendingUp, TrendingDown, Minus, Award, Clock, AlertCircle, User } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { CHART_COLORS_BLUE, CHART_COLOR_PRIMARY, CATEGORY_CHART_LIMIT } from "@/lib/constants"
 
 interface RankingTabProps {
   tickets: Ticket[]
@@ -18,23 +19,18 @@ interface RankingTabProps {
 const chartConfig = {
   total: {
     label: "Total",
-    color: "#1a56db"
+    color: CHART_COLOR_PRIMARY
   }
 }
-
-const COLORS = [
-  "#1a56db", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe",
-  "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa"
-]
 
 export function RankingTab({ tickets, categoryStats }: RankingTabProps) {
   const weekComparison = useMemo(() => getWeekComparison(tickets), [tickets])
   
   const chartData = useMemo(() => {
-    return categoryStats.slice(0, 10).map((cat, index) => ({
+    return categoryStats.slice(0, CATEGORY_CHART_LIMIT).map((cat, index) => ({
       nome: cat.nome,
       total: cat.total,
-      fill: COLORS[index % COLORS.length]
+      fill: CHART_COLORS_BLUE[index % CHART_COLORS_BLUE.length]
     }))
   }, [categoryStats])
 

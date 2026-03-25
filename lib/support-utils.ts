@@ -1,7 +1,5 @@
 import type { Ticket, TicketRaw, CategoryStats, ResponsavelStats, HourlyData, DailyData, TimeDistribution, KPIData, PeriodFilter, GroupFilter, Categoria } from "./support-types"
-
-// SLA target in minutes
-const SLA_TARGET = 120
+import { SLA_TARGET_MINUTES as SLA_TARGET, KEYWORD_MIN_COUNT } from "./constants"
 
 // Stop words to remove from word cloud
 const STOP_WORDS = new Set([
@@ -380,7 +378,7 @@ export function extractKeywords(tickets: Ticket[]): { word: string; count: numbe
   
   return Object.entries(wordCount)
     .map(([word, count]) => ({ word, count }))
-    .filter(w => w.count >= 3)
+    .filter(w => w.count >= KEYWORD_MIN_COUNT)
     .sort((a, b) => b.count - a.count)
     .slice(0, 50)
 }

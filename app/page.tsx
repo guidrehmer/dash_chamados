@@ -30,6 +30,7 @@ import {
   buildAIContext
 } from "@/lib/support-utils"
 import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2 } from "lucide-react"
+import { FETCH_MAX_RETRIES, FETCH_RETRY_BASE_MS } from "@/lib/constants"
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
@@ -147,7 +148,8 @@ export default function DashboardPage() {
   // Progressive background loading
   const [accumulatedItems, setAccumulatedItems] = useState<TicketRaw[]>([])
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const sessionRef = useRef(0) // cancela fetches obsoletos ao atualizar
+  const sessionRef = useRef(0)          // cancela fetches obsoletos ao atualizar
+  const abortRef = useRef<AbortController | null>(null)  // cancela a requisição HTTP em curso
 
   useEffect(() => {
     if (!data?.items || !Array.isArray(data.items)) return
@@ -166,13 +168,24 @@ export default function DashboardPage() {
     let offset: number = data.nextOffset
 
     const fetchMore = async () => {
+      let retries = 0
+
       while (true) {
-        if (sessionRef.current !== sessionId) break // refresh chamado, para
+        if (sessionRef.current !== sessionId) break
+
+        const controller = new AbortController()
+        abortRef.current = controller
+
         try {
-          const res = await fetch(`/api/support?offset=${offset}`)
-          const batch = await res.json()
+          const res = await fetch(`/api/support?offset=${offset}`, {
+            signal: controller.signal
+          })
           if (sessionRef.current !== sessionId) break
-          if (batch.success && batch.items?.length > 0) {
+
+          const batch = await res.json()
+          retries = 0 // reset após sucesso
+
+          if (batch.items?.length > 0) {
             setAccumulatedItems(prev => [...prev, ...(batch.items as TicketRaw[])])
           }
           if (batch.hasMore && batch.nextOffset) {
@@ -180,10 +193,15 @@ export default function DashboardPage() {
           } else {
             break
           }
-        } catch {
-          break
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") break // cancelado intencionalmente
+          retries++
+          if (retries >= FETCH_MAX_RETRIES) break
+          // backoff exponencial antes de tentar novamente
+          await new Promise(r => setTimeout(r, FETCH_RETRY_BASE_MS * retries))
         }
       }
+
       if (sessionRef.current === sessionId) setIsLoadingMore(false)
     }
 
@@ -242,7 +260,8 @@ export default function DashboardPage() {
   }, [data?.timestamp])
 
   const handleRefresh = useCallback(() => {
-    sessionRef.current++ // cancela qualquer fetch em background
+    sessionRef.current++       // invalida sessão atual — para o loop de background
+    abortRef.current?.abort()  // cancela a requisição HTTP em curso imediatamente
     setAccumulatedItems([])
     setIsLoadingMore(false)
     mutate()

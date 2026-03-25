@@ -27,9 +27,20 @@ const QUICK_PROMPTS = [
   "Horarios criticos e dimensionamento de equipe"
 ]
 
-// Simple markdown to HTML converter
-function renderMarkdown(text: string): string {
+// Escapa entidades HTML para evitar XSS antes de aplicar markdown
+function escapeHtml(text: string): string {
   return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+// Converte markdown para HTML — opera sobre texto já sanitizado
+function renderMarkdown(text: string): string {
+  const safe = escapeHtml(text)
+  return safe
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.*?)\*/g, "<em>$1</em>")
     .replace(/^### (.*$)/gm, "<h3 class='text-base font-semibold mt-3 mb-1'>$1</h3>")
@@ -59,6 +70,10 @@ export function AITab({ systemPrompt }: AITabProps) {
 
   const sendMessage = useCallback(async (prompt: string) => {
     if (!prompt.trim() || isLoading) return
+    if (prompt.length > 2000) {
+      setError("Mensagem muito longa. Limite: 2000 caracteres.")
+      return
+    }
 
     setError(null)
     setQuestion("")
@@ -255,10 +270,11 @@ export function AITab({ systemPrompt }: AITabProps) {
               <Textarea
                 placeholder="Digite sua pergunta... (Enter para enviar)"
                 value={question}
-                onChange={e => setQuestion(e.target.value)}
+                onChange={e => setQuestion(e.target.value.slice(0, 2000))}
                 onKeyDown={handleKeyDown}
                 className="min-h-[60px] max-h-[140px] resize-none flex-1 text-sm"
                 disabled={isLoading}
+                maxLength={2000}
               />
               <Button
                 type="submit"
