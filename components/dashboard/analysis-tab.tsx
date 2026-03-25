@@ -22,7 +22,26 @@ import { STATUS_COLORS } from "@/lib/constants"
 
 // ─── CSV Parser ──────────────────────────────────────────────────────────────
 
-function parseCSVLine(line: string): string[] {
+/** Remove BOM, acentos e normaliza para lowercase */
+function normalizeHeader(h: string): string {
+  return h
+    .replace(/^\uFEFF/, "") // BOM UTF-8
+    .replace(/['"]/g, "")
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove diacríticos (acentos)
+    .replace(/\s+/g, "") // remove espaços internos
+}
+
+/** Detecta o separador do CSV (vírgula ou ponto e vírgula) */
+function detectSeparator(firstLine: string): string {
+  const commas = (firstLine.match(/,/g) || []).length
+  const semicolons = (firstLine.match(/;/g) || []).length
+  return semicolons > commas ? ";" : ","
+}
+
+function parseCSVLine(line: string, sep: string): string[] {
   const result: string[] = []
   let current = ""
   let inQuotes = false
@@ -30,13 +49,9 @@ function parseCSVLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const char = line[i]
     if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"'
-        i++
-      } else {
-        inQuotes = !inQuotes
-      }
-    } else if (char === "," && !inQuotes) {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++ }
+      else inQuotes = !inQuotes
+    } else if (char === sep && !inQuotes) {
       result.push(current.trim())
       current = ""
     } else {
@@ -47,38 +62,110 @@ function parseCSVLine(line: string): string[] {
   return result
 }
 
+/**
+ * Mapeamento flexível de nomes de colunas.
+ * Chave = nome normalizado aceito → Valor = campo interno do TicketRaw
+ */
+const COLUMN_ALIASES: Record<string, string> = {
+  // dataabertura
+  dataabertura: "dataabertura",
+  databertura: "dataabertura",
+  datadeabertura: "dataabertura",
+  abertura: "dataabertura",
+  dataaberto: "dataabertura",
+  opened: "dataabertura",
+  createdat: "dataabertura",
+  datacriacao: "dataabertura",
+  // dataencerrado
+  dataencerrado: "dataencerrado",
+  dataencerramento: "dataencerrado",
+  encerrado: "dataencerrado",
+  encerramento: "dataencerrado",
+  datafechamento: "dataencerrado",
+  fechamento: "dataencerrado",
+  resolvedat: "dataencerrado",
+  closedat: "dataencerrado",
+  // descricao
+  descricao: "descricao",
+  descricao2: "descricao",
+  titulo: "descricao",
+  title: "descricao",
+  description: "descricao",
+  assunto: "descricao",
+  subject: "descricao",
+  chamado: "descricao",
+  // situacao
+  situacao: "situacao",
+  status: "situacao",
+  estado: "situacao",
+  situacaochamado: "situacao",
+  // grupo
+  grupo: "grupo",
+  setor: "grupo",
+  departamento: "grupo",
+  area: "grupo",
+  team: "grupo",
+  group: "grupo",
+  // responsavel
+  responsavel: "responsavel",
+  responsavelchamado: "responsavel",
+  atendente: "responsavel",
+  assignee: "responsavel",
+  agente: "responsavel",
+  tecnico: "responsavel",
+  agent: "responsavel",
+}
+
+const REQUIRED_FIELDS = ["dataabertura", "dataencerrado", "descricao", "situacao", "grupo", "responsavel"]
+
 function parseCSV(text: string): { tickets: TicketRaw[]; errors: string[] } {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  // Remove BOM global se presente
+  const cleanText = text.replace(/^\uFEFF/, "")
+  const lines = cleanText.split(/\r?\n/).filter(l => l.trim())
   if (lines.length < 2) return { tickets: [], errors: ["CSV vazio ou sem dados."] }
 
-  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/['"]/g, "").trim())
+  const sep = detectSeparator(lines[0])
+  const rawHeaders = parseCSVLine(lines[0], sep).map(normalizeHeader)
 
-  const expectedCols = ["dataabertura", "dataencerrado", "descricao", "situacao", "grupo", "responsavel"]
-  const missing = expectedCols.filter(c => !headers.includes(c))
+  // Mapear headers encontrados → campos internos
+  const fieldMap: Record<string, number> = {} // campo interno → índice da coluna
+  rawHeaders.forEach((h, idx) => {
+    const mapped = COLUMN_ALIASES[h]
+    if (mapped && !(mapped in fieldMap)) {
+      fieldMap[mapped] = idx
+    }
+  })
+
+  const missing = REQUIRED_FIELDS.filter(f => !(f in fieldMap))
   if (missing.length > 0) {
-    return { tickets: [], errors: [`Colunas ausentes no CSV: ${missing.join(", ")}`] }
+    const found = rawHeaders.filter(h => h).join(", ")
+    return {
+      tickets: [],
+      errors: [
+        `Colunas não reconhecidas. Encontrado: [${found || "nenhuma"}]. ` +
+        `Esperado (ou equivalentes): ${missing.join(", ")}.`
+      ]
+    }
   }
 
-  const idxOf = (col: string) => headers.indexOf(col)
   const tickets: TicketRaw[] = []
   const errors: string[] = []
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseCSVLine(lines[i])
-    if (cols.length < expectedCols.length) {
-      errors.push(`Linha ${i + 1} ignorada: colunas insuficientes`)
-      continue
-    }
-    const situacao = cols[idxOf("situacao")] as TicketRaw["situacao"]
-    const grupo = cols[idxOf("grupo")] as TicketRaw["grupo"]
+    const cols = parseCSVLine(lines[i], sep)
+    if (cols.length < 2) continue // linha vazia ou incompleta
+
+    const get = (field: string) => cols[fieldMap[field]]?.trim() ?? ""
+    const situacao = get("situacao") as TicketRaw["situacao"]
+    const grupo = get("grupo") as TicketRaw["grupo"]
 
     tickets.push({
-      dataabertura: cols[idxOf("dataabertura")],
-      dataencerrado: cols[idxOf("dataencerrado")] || null,
-      descricao: cols[idxOf("descricao")],
+      dataabertura: get("dataabertura"),
+      dataencerrado: get("dataencerrado") || null,
+      descricao: get("descricao"),
       situacao,
       grupo,
-      responsavel: cols[idxOf("responsavel")] || null,
+      responsavel: get("responsavel") || null,
     })
   }
 
