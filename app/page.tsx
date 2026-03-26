@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import useSWR from "swr"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
+import { Sidebar, NAV_LABELS, type NavSection } from "@/components/layout/sidebar"
 import { OverviewTab } from "@/components/dashboard/overview-tab"
 import { RankingTab } from "@/components/dashboard/ranking-tab"
 import { RecurrentTab } from "@/components/dashboard/recurrent-tab"
@@ -28,13 +28,23 @@ import {
   getHourlyDistribution,
   getDailyData,
   getTimeDistribution,
-  buildAIContext
+  buildAIContext,
 } from "@/lib/support-utils"
-import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2, LineChart, AlertCircle } from "lucide-react"
+import {
+  RefreshCw,
+  LogOut,
+  Download,
+  Loader2,
+  Menu,
+  AlertCircle,
+  ChevronDown,
+} from "lucide-react"
 import { FETCH_MAX_RETRIES, FETCH_RETRY_BASE_MS, LIVE_POLL_INTERVAL_MS } from "@/lib/constants"
+import { cn } from "@/lib/utils"
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
+// ─── Login page ───────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [usuario, setUsuario] = useState("")
   const [senha, setSenha] = useState("")
@@ -77,7 +87,6 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
           <h1 className="text-3xl font-bold text-white">Bem-vindo</h1>
           <p className="text-white/60 text-sm mt-1">Faça login para continuar</p>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="text-xs font-semibold text-white/60 uppercase tracking-wider block mb-2">
@@ -103,13 +112,11 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
               className="bg-white/10 border-white/20 text-white placeholder:text-white/30 focus:border-white/50 focus:bg-white/15 h-12 rounded-xl"
             />
           </div>
-
           {erro && (
             <p className="text-red-400 text-sm flex items-center gap-2">
               <span>⚠</span> {erro}
             </p>
           )}
-
           <Button
             type="submit"
             disabled={loading}
@@ -118,7 +125,6 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
             {loading ? "Entrando..." : "Entrar"}
           </Button>
         </form>
-
         <p className="text-white/20 text-xs text-center mt-12">
           CrisduLabs © {new Date().getFullYear()}
         </p>
@@ -127,26 +133,45 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   )
 }
 
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [autenticado, setAutenticado] = useState<boolean | null>(null)
-  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("todos")
-  const [groupFilter, setGroupFilter] = useState<GroupFilter>("TODOS")
-  const [responsavelFilter, setResponsavelFilter] = useState<string>("TODOS")
-  const [dateFrom, setDateFrom] = useState<string>("")
-  const [dateTo, setDateTo] = useState<string>("")
-  const [activeTab, setActiveTab] = useState("overview")
 
+  // ── Layout state ────────────────────────────────────────────────────────────
+  const [activeSection, setActiveSection] = useState<NavSection>("overview")
+  const [collapsed, setCollapsed]         = useState(false)
+  const [mobileOpen, setMobileOpen]       = useState(false)
+
+  // ── Filters ─────────────────────────────────────────────────────────────────
+  const [periodFilter, setPeriodFilter]           = useState<PeriodFilter>("todos")
+  const [groupFilter, setGroupFilter]             = useState<GroupFilter>("TODOS")
+  const [responsavelFilter, setResponsavelFilter] = useState<string>("TODOS")
+  const [dateFrom, setDateFrom]                   = useState<string>("")
+  const [dateTo, setDateTo]                       = useState<string>("")
+
+  // Restore auth + sidebar preference
   useEffect(() => {
     setAutenticado(localStorage.getItem("crisdulabs_auth") === "1")
+    const saved = localStorage.getItem("sidebar_collapsed")
+    if (saved !== null) setCollapsed(saved === "true")
   }, [])
 
+  const handleToggleCollapsed = useCallback(() => {
+    setCollapsed(prev => {
+      const next = !prev
+      localStorage.setItem("sidebar_collapsed", String(next))
+      return next
+    })
+  }, [])
+
+  // ── Data: historical tickets ─────────────────────────────────────────────────
   const { data, error, isLoading, mutate } = useSWR(
     autenticado ? "/api/support" : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
 
-  // ── Streams de dados ao vivo ──────────────────────────────────────────────
+  // ── Live streams ─────────────────────────────────────────────────────────────
   const { data: filaData } = useSWR<{ items: FilaItem[]; total: number }>(
     autenticado ? "/api/fila" : null,
     fetcher,
@@ -157,20 +182,18 @@ export default function DashboardPage() {
     fetcher,
     { refreshInterval: LIVE_POLL_INTERVAL_MS, revalidateOnFocus: false }
   )
-
-  const filaCount     = filaData?.total     ?? 0
+  const filaCount      = filaData?.total     ?? 0
   const aguardandoCount = aguardandoData?.total ?? 0
 
-  // Progressive background loading
+  // ── Progressive background loading ──────────────────────────────────────────
   const [accumulatedItems, setAccumulatedItems] = useState<TicketRaw[]>([])
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const sessionRef = useRef(0)          // cancela fetches obsoletos ao atualizar
-  const abortRef = useRef<AbortController | null>(null)  // cancela a requisição HTTP em curso
+  const [isLoadingMore, setIsLoadingMore]       = useState(false)
+  const sessionRef = useRef(0)
+  const abortRef   = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!data?.items || !Array.isArray(data.items)) return
 
-    // Nova carga (inicial ou refresh) — reinicia os itens acumulados
     const sessionId = ++sessionRef.current
     setAccumulatedItems(data.items as TicketRaw[])
 
@@ -179,28 +202,20 @@ export default function DashboardPage() {
       return
     }
 
-    // Inicia busca em background para os lotes restantes
     setIsLoadingMore(true)
     let offset: number = data.nextOffset
 
     const fetchMore = async () => {
       let retries = 0
-
       while (true) {
         if (sessionRef.current !== sessionId) break
-
         const controller = new AbortController()
         abortRef.current = controller
-
         try {
-          const res = await fetch(`/api/support?offset=${offset}`, {
-            signal: controller.signal
-          })
+          const res   = await fetch(`/api/support?offset=${offset}`, { signal: controller.signal })
           if (sessionRef.current !== sessionId) break
-
           const batch = await res.json()
-          retries = 0 // reset após sucesso
-
+          retries = 0
           if (batch.items?.length > 0) {
             setAccumulatedItems(prev => [...prev, ...(batch.items as TicketRaw[])])
           }
@@ -210,74 +225,61 @@ export default function DashboardPage() {
             break
           }
         } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") break // cancelado intencionalmente
+          if (err instanceof DOMException && err.name === "AbortError") break
           retries++
           if (retries >= FETCH_MAX_RETRIES) break
-          // backoff exponencial antes de tentar novamente
           await new Promise(r => setTimeout(r, FETCH_RETRY_BASE_MS * retries))
         }
       }
-
       if (sessionRef.current === sessionId) setIsLoadingMore(false)
     }
 
     fetchMore()
   }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Process raw tickets
+  // ── Process & filter ─────────────────────────────────────────────────────────
   const allTickets = useMemo<Ticket[]>(() => {
     if (!accumulatedItems.length) return []
     return processTickets(accumulatedItems)
   }, [accumulatedItems])
 
-  // Responsáveis list (from all tickets, unfiltered)
   const responsaveis = useMemo(() => getResponsaveis(allTickets), [allTickets])
 
-  // Apply filters
   const filteredTickets = useMemo(() => {
     let tickets = allTickets
     tickets = filterByGroup(tickets, groupFilter)
-    if (responsavelFilter !== "TODOS") {
-      tickets = filterByResponsavel(tickets, responsavelFilter)
-    }
+    if (responsavelFilter !== "TODOS") tickets = filterByResponsavel(tickets, responsavelFilter)
     if (periodFilter === "personalizado") {
-      if (dateFrom && dateTo) {
-        tickets = filterByDateRange(tickets, new Date(dateFrom), new Date(dateTo))
-      }
+      if (dateFrom && dateTo) tickets = filterByDateRange(tickets, new Date(dateFrom), new Date(dateTo))
     } else {
       tickets = filterByPeriod(tickets, periodFilter)
     }
     return tickets
   }, [allTickets, periodFilter, groupFilter, responsavelFilter, dateFrom, dateTo])
 
-  // Calculate metrics
-  const kpis = useMemo(() => calculateKPIs(filteredTickets), [filteredTickets])
-  const categoryStats = useMemo(() => calculateCategoryStats(filteredTickets), [filteredTickets])
-  const hourlyData = useMemo(() => getHourlyDistribution(filteredTickets), [filteredTickets])
-  const dailyData = useMemo(() => getDailyData(filteredTickets, 30), [filteredTickets])
+  // ── Metrics ──────────────────────────────────────────────────────────────────
+  const kpis             = useMemo(() => calculateKPIs(filteredTickets), [filteredTickets])
+  const categoryStats    = useMemo(() => calculateCategoryStats(filteredTickets), [filteredTickets])
+  const hourlyData       = useMemo(() => getHourlyDistribution(filteredTickets), [filteredTickets])
+  const dailyData        = useMemo(() => getDailyData(filteredTickets, 30), [filteredTickets])
   const timeDistribution = useMemo(() => getTimeDistribution(filteredTickets), [filteredTickets])
+  const aiContext        = useMemo(
+    () => buildAIContext(filteredTickets, kpis, categoryStats, hourlyData),
+    [filteredTickets, kpis, categoryStats, hourlyData]
+  )
 
-  // AI context
-  const aiContext = useMemo(() => {
-    return buildAIContext(filteredTickets, kpis, categoryStats, hourlyData)
-  }, [filteredTickets, kpis, categoryStats, hourlyData])
-
-  // Format timestamp
+  // ── Helpers ──────────────────────────────────────────────────────────────────
   const lastUpdate = useMemo(() => {
     if (!data?.timestamp) return null
-    const date = new Date(data.timestamp)
-    return date.toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
+    return new Date(data.timestamp).toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
     })
   }, [data?.timestamp])
 
   const handleRefresh = useCallback(() => {
-    sessionRef.current++       // invalida sessão atual — para o loop de background
-    abortRef.current?.abort()  // cancela a requisição HTTP em curso imediatamente
+    sessionRef.current++
+    abortRef.current?.abort()
     setAccumulatedItems([])
     setIsLoadingMore(false)
     mutate()
@@ -290,263 +292,226 @@ export default function DashboardPage() {
 
   const handlePeriodChange = (value: string) => {
     setPeriodFilter(value as PeriodFilter)
-    // Reset date range when switching away from personalizado
-    if (value !== "personalizado") {
-      setDateFrom("")
-      setDateTo("")
-    }
+    if (value !== "personalizado") { setDateFrom(""); setDateTo("") }
   }
 
   const periodLabel = useMemo(() => {
     switch (periodFilter) {
-      case "hoje": return "Hoje"
-      case "semana": return "Esta Semana"
-      case "mes": return "Este Mês"
+      case "hoje":          return "Hoje"
+      case "semana":        return "Esta Semana"
+      case "mes":           return "Este Mês"
       case "personalizado": return dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : "Personalizado"
-      default: return "Todos"
+      default:              return "Todos"
     }
   }, [periodFilter, dateFrom, dateTo])
 
-  if (autenticado === null) return null
-  if (!autenticado) return <LoginPage onLogin={() => setAutenticado(true)} />
+  // Sidebar offset classes
+  const sidebarOffset = collapsed ? "md:pl-[64px]" : "md:pl-[240px]"
 
+  // ── Guards ────────────────────────────────────────────────────────────────────
+  if (autenticado === null) return null
+  if (!autenticado)         return <LoginPage onLogin={() => setAutenticado(true)} />
+
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex flex-col gap-3">
-            {/* Row 1: title + controls */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-xl font-semibold text-slate-900">
-                  Dashboard de Suporte - CrisduLabs
+      {/* ── Sidebar ── */}
+      <Sidebar
+        active={activeSection}
+        onNavigate={setActiveSection}
+        collapsed={collapsed}
+        onToggle={handleToggleCollapsed}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+        filaCount={filaCount}
+      />
+
+      {/* ── Main area (shifts right to accommodate sidebar) ── */}
+      <div className={cn("flex flex-col min-h-screen transition-all duration-200", sidebarOffset)}>
+
+        {/* ── Sticky top header ──────────────────────────────────────────────── */}
+        <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
+          <div className="px-4 sm:px-6">
+
+            {/* Row 1: hamburger + title + actions */}
+            <div className="flex items-center gap-3 h-16">
+              {/* Mobile hamburger */}
+              <button
+                className="md:hidden p-2 rounded-md text-slate-500 hover:bg-slate-100"
+                onClick={() => setMobileOpen(true)}
+                aria-label="Abrir menu"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+
+              {/* Page title */}
+              <div className="flex-1 min-w-0">
+                <h1 className="text-base font-semibold text-slate-900 truncate">
+                  {NAV_LABELS[activeSection]}
                 </h1>
                 {lastUpdate && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Ultima atualizacao: {lastUpdate}
+                  <p className="text-xs text-muted-foreground hidden sm:block">
+                    Atualizado: {lastUpdate}
+                    {isLoadingMore && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-slate-400">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        carregando mais...
+                      </span>
+                    )}
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Grupo */}
-                <Select value={groupFilter} onValueChange={(v) => setGroupFilter(v as GroupFilter)}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Grupo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TODOS">Todos</SelectItem>
-                    <SelectItem value="SISTEMAS">Sistemas</SelectItem>
-                    <SelectItem value="CIT">CIT</SelectItem>
-                  </SelectContent>
-                </Select>
 
-                {/* Responsável */}
-                <Select value={responsavelFilter} onValueChange={setResponsavelFilter}>
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="Responsável" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TODOS">Todos responsáveis</SelectItem>
-                    {responsaveis.map(r => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Período */}
-                <Select value={periodFilter} onValueChange={handlePeriodChange}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Periodo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hoje">Hoje</SelectItem>
-                    <SelectItem value="semana">Esta Semana</SelectItem>
-                    <SelectItem value="mes">Este Mês</SelectItem>
-                    <SelectItem value="personalizado">Personalizado</SelectItem>
-                    <SelectItem value="todos">Todos</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {/* Export CSV */}
+              {/* Actions */}
+              <div className="flex items-center gap-1.5">
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={handleExportCSV}
                   disabled={filteredTickets.length === 0}
                   title="Exportar CSV"
+                  className="h-8 w-8"
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-3.5 w-3.5" />
                 </Button>
-
-                {/* Refresh */}
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={handleRefresh}
                   disabled={isLoading}
                   title="Atualizar dados"
+                  className="h-8 w-8"
                 >
-                  <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                  <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
                 </Button>
-
-                {/* Logout */}
                 <Button
                   variant="ghost"
                   size="icon"
                   title="Sair"
+                  className="h-8 w-8"
                   onClick={() => { localStorage.removeItem("crisdulabs_auth"); setAutenticado(false) }}
                 >
-                  <LogOut className="h-4 w-4 text-slate-500" />
+                  <LogOut className="h-3.5 w-3.5 text-slate-500" />
                 </Button>
               </div>
             </div>
 
-            {/* Row 2: date range inputs (only when periodFilter === "personalizado") */}
-            {periodFilter === "personalizado" && (
-              <div className="flex flex-wrap items-center gap-3 pb-1">
-                <span className="text-sm text-muted-foreground font-medium">Intervalo:</span>
+            {/* Row 2: filters */}
+            <div className="flex flex-wrap items-center gap-2 pb-3">
+              {/* Grupo */}
+              <Select value={groupFilter} onValueChange={(v) => setGroupFilter(v as GroupFilter)}>
+                <SelectTrigger className="h-8 w-[110px] text-xs">
+                  <SelectValue placeholder="Grupo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TODOS">Todos</SelectItem>
+                  <SelectItem value="SISTEMAS">Sistemas</SelectItem>
+                  <SelectItem value="CIT">CIT</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Responsável */}
+              <Select value={responsavelFilter} onValueChange={setResponsavelFilter}>
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue placeholder="Responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TODOS">Todos responsáveis</SelectItem>
+                  {responsaveis.map(r => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Período */}
+              <Select value={periodFilter} onValueChange={handlePeriodChange}>
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="Período" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hoje">Hoje</SelectItem>
+                  <SelectItem value="semana">Esta Semana</SelectItem>
+                  <SelectItem value="mes">Este Mês</SelectItem>
+                  <SelectItem value="personalizado">Personalizado</SelectItem>
+                  <SelectItem value="todos">Todos</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Date range inputs */}
+              {periodFilter === "personalizado" && (
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-muted-foreground">De</label>
                   <input
                     type="date"
                     value={dateFrom}
                     onChange={e => setDateFrom(e.target.value)}
-                    className="border border-slate-200 rounded-md px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white h-8 focus:outline-none focus:ring-1 focus:ring-primary"
                   />
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-muted-foreground">Até</label>
+                  <span className="text-xs text-muted-foreground">até</span>
                   <input
                     type="date"
                     value={dateTo}
                     min={dateFrom}
                     onChange={e => setDateTo(e.target.value)}
-                    className="border border-slate-200 rounded-md px-2 py-1 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white h-8 focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
-                {(!dateFrom || !dateTo) && (
-                  <span className="text-xs text-amber-600">Selecione as duas datas para filtrar</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+              )}
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Loading State */}
-        {isLoading && !data && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <Spinner className="h-10 w-10 text-primary" />
-            <p className="mt-4 text-muted-foreground">Carregando dados...</p>
-            <Progress value={33} className="w-64 mt-4" />
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-            <p className="text-red-800 font-medium">Erro ao carregar dados</p>
-            <p className="text-red-600 text-sm mt-1">
-              {error.message || "Falha na conexao com o servidor"}
-            </p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={handleRefresh}
-            >
-              Tentar novamente
-            </Button>
-          </div>
-        )}
-
-        {/* Dashboard Content */}
-        {data && !error && (
-          <>
-            {/* Summary Bar */}
-            <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <span className="font-medium text-slate-700 flex items-center gap-2">
+              {/* Summary pill */}
+              <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-medium text-slate-700">
                   {filteredTickets.length.toLocaleString("pt-BR")} atendimentos
-                  {isLoadingMore && (
-                    <span className="flex items-center gap-1 text-xs text-slate-400 font-normal">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      carregando mais...
-                    </span>
-                  )}
-                </span>
-                <span className="text-slate-300">|</span>
-                <span className="text-muted-foreground">
-                  Grupo: <strong>{groupFilter === "TODOS" ? "Todos" : groupFilter}</strong>
-                </span>
-                <span className="text-slate-300">|</span>
-                <span className="text-muted-foreground">
-                  Responsável: <strong>{responsavelFilter === "TODOS" ? "Todos" : responsavelFilter}</strong>
-                </span>
-                <span className="text-slate-300">|</span>
-                <span className="text-muted-foreground">
-                  Período: <strong>{periodLabel}</strong>
                 </span>
                 {kpis.semResponsavel > 0 && (
-                  <>
-                    <span className="text-slate-300">|</span>
-                    <span className="text-amber-600 font-medium">
-                      ⚠ {kpis.semResponsavel} sem responsável
-                    </span>
-                  </>
+                  <span className="text-amber-600 font-medium">
+                    ⚠ {kpis.semResponsavel} sem resp.
+                  </span>
                 )}
                 {kpis.criticalTickets > 0 && (
-                  <>
-                    <span className="text-slate-300">|</span>
-                    <span className="text-red-600 font-medium">
-                      🔴 {kpis.criticalTickets} casos críticos (+24h)
-                    </span>
-                  </>
+                  <span className="text-red-600 font-medium">
+                    🔴 {kpis.criticalTickets} críticos
+                  </span>
                 )}
                 {filaCount > 0 && (
-                  <>
-                    <span className="text-slate-300">|</span>
-                    <span className="flex items-center gap-1 text-red-700 font-semibold animate-pulse">
-                      <AlertCircle className="h-3.5 w-3.5" />
-                      {filaCount} na fila sem responsável
-                    </span>
-                  </>
+                  <span className="flex items-center gap-1 text-red-700 font-semibold animate-pulse">
+                    <AlertCircle className="h-3 w-3" />
+                    {filaCount} na fila
+                  </span>
                 )}
               </div>
             </div>
+          </div>
+        </header>
 
-            {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-              <TabsList className="bg-white border border-slate-200 p-1">
-                <TabsTrigger value="overview" className="gap-2">
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span className="hidden sm:inline">Visao Geral</span>
-                </TabsTrigger>
-                <TabsTrigger value="ranking" className="gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Ranking</span>
-                </TabsTrigger>
-                <TabsTrigger value="recurrent" className="gap-2">
-                  <Repeat className="h-4 w-4" />
-                  <span className="hidden sm:inline">Recorrentes</span>
-                </TabsTrigger>
-                <TabsTrigger value="sla" className="gap-2">
-                  <Clock className="h-4 w-4" />
-                  <span className="hidden sm:inline">SLA</span>
-                </TabsTrigger>
-                <TabsTrigger value="ai" className="gap-2">
-                  <Bot className="h-4 w-4" />
-                  <span className="hidden sm:inline">IA</span>
-                </TabsTrigger>
-                <TabsTrigger value="analysis" className="gap-2">
-                  <LineChart className="h-4 w-4" />
-                  <span className="hidden sm:inline">Análises</span>
-                </TabsTrigger>
-              </TabsList>
+        {/* ── Main content ───────────────────────────────────────────────────── */}
+        <main className="flex-1 px-4 sm:px-6 py-6">
 
-              <TabsContent value="overview" className="mt-6">
+          {/* Loading */}
+          {isLoading && !data && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Spinner className="h-10 w-10 text-primary" />
+              <p className="mt-4 text-muted-foreground">Carregando dados...</p>
+              <Progress value={33} className="w-64 mt-4" />
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+              <p className="text-red-800 font-medium">Erro ao carregar dados</p>
+              <p className="text-red-600 text-sm mt-1">
+                {error.message || "Falha na conexão com o servidor"}
+              </p>
+              <Button variant="outline" className="mt-4" onClick={handleRefresh}>
+                Tentar novamente
+              </Button>
+            </div>
+          )}
+
+          {/* Content per section */}
+          {data && !error && (
+            <>
+              {activeSection === "overview" && (
                 <OverviewTab
                   tickets={filteredTickets}
                   kpis={kpis}
@@ -555,49 +520,44 @@ export default function DashboardPage() {
                   filaCount={filaCount}
                   aguardandoCount={aguardandoCount}
                 />
-              </TabsContent>
-
-              <TabsContent value="ranking" className="mt-6">
-                <RankingTab
-                  tickets={filteredTickets}
-                  categoryStats={categoryStats}
-                />
-              </TabsContent>
-
-              <TabsContent value="recurrent" className="mt-6">
-                <RecurrentTab
-                  tickets={filteredTickets}
-                  categoryStats={categoryStats}
-                />
-              </TabsContent>
-
-              <TabsContent value="sla" className="mt-6">
+              )}
+              {activeSection === "sla" && (
                 <SLATab
                   tickets={filteredTickets}
                   kpis={kpis}
                   dailyData={dailyData}
                   timeDistribution={timeDistribution}
                 />
-              </TabsContent>
-
-              <TabsContent value="ai" className="mt-6">
+              )}
+              {activeSection === "ranking" && (
+                <RankingTab
+                  tickets={filteredTickets}
+                  categoryStats={categoryStats}
+                />
+              )}
+              {activeSection === "recurrent" && (
+                <RecurrentTab
+                  tickets={filteredTickets}
+                  categoryStats={categoryStats}
+                />
+              )}
+              {activeSection === "ai" && (
                 <AITab systemPrompt={aiContext} />
-              </TabsContent>
-
-              <TabsContent value="analysis" className="mt-6">
+              )}
+              {activeSection === "analysis" && (
                 <AnalysisTab />
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
-      </main>
+              )}
+            </>
+          )}
+        </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-4 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 text-center text-xs text-muted-foreground">
-          Dashboard de Monitoramento de Suporte - CrisduLabs
-        </div>
-      </footer>
+        {/* ── Footer ─────────────────────────────────────────────────────────── */}
+        <footer className="border-t border-slate-200 bg-white py-3 mt-auto">
+          <p className="text-center text-xs text-muted-foreground">
+            Dashboard de Monitoramento de Suporte · CrisduLabs © {new Date().getFullYear()}
+          </p>
+        </footer>
+      </div>
     </div>
   )
 }
