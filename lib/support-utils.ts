@@ -1,4 +1,8 @@
-import type { Ticket, TicketRaw, CategoryStats, ResponsavelStats, HourlyData, DailyData, TimeDistribution, KPIData, PeriodFilter, GroupFilter, Categoria } from "./support-types"
+import type {
+  Ticket, TicketRaw, CategoryStats, ResponsavelStats, HourlyData, DailyData,
+  TimeDistribution, KPIData, PeriodFilter, GroupFilter, Categoria,
+  PrioridadeStats, BacklogIdadeFaixas
+} from "./support-types"
 import {
   SLA_TARGET_MINUTES as SLA_TARGET,
   KEYWORD_MIN_COUNT,
@@ -6,6 +10,10 @@ import {
   TMA_YELLOW_MAX,
   SLA_RATE_TARGET,
   SLA_RATE_WARNING,
+  MTTA_TARGET_MINUTES,
+  MTTA_WARNING_MINUTES,
+  PRIORIDADE_POR_CATEGORIA,
+  SLA_POR_PRIORIDADE,
 } from "./constants"
 
 // Stop words to remove from word cloud
@@ -107,6 +115,81 @@ export function categorizeTicket(descricao: string): Categoria {
   return "Outros"
 }
 
+// ─── Prioridade inferida por categoria ───────────────────────────────────────
+export function getPrioridadeInferida(categoria: string): "Critico" | "Alto" | "Medio" | "Baixo" {
+  return PRIORIDADE_POR_CATEGORIA[categoria] ?? "Medio"
+}
+
+export function getSLATargetByPrioridade(categoria: string): number {
+  const prioridade = getPrioridadeInferida(categoria)
+  return SLA_POR_PRIORIDADE[prioridade]
+}
+
+// ─── MTTA — Mean Time To Acknowledge ─────────────────────────────────────────
+/**
+ * Calcula MTTA em minutos usando menor_historico.
+ * Retorna null quando:
+ *   - menor_historico está ausente (sem interação ainda)
+ *   - diff < 0 (dado corrompido — historico anterior à abertura)
+ *   - diff > 30 dias (dado inválido)
+ */
+export function calculateMTTA(dataabertura: string, menorHistorico?: string | null): number | null {
+  if (!menorHistorico) return null
+
+  const abertura = new Date(dataabertura).getTime()
+  const primeiraInteracao = new Date(menorHistorico).getTime()
+  const diffMinutes = (primeiraInteracao - abertura) / (1000 * 60)
+
+  if (diffMinutes < 0) return null                    // edge case: dado corrompido
+  if (diffMinutes > 30 * 24 * 60) return null         // edge case: outlier > 30 dias
+
+  return Math.round(diffMinutes)
+}
+
+// ─── Backlog por idade ────────────────────────────────────────────────────────
+export function calcularBacklogPorIdade(tickets: Ticket[]): BacklogIdadeFaixas {
+  const agora = Date.now()
+  const result: BacklogIdadeFaixas = { menosDe4h: 0, de4hA24h: 0, de1A3dias: 0, maisDe3dias: 0 }
+
+  tickets
+    .filter(t => t.situacao !== "Encerrado")
+    .forEach(t => {
+      const idadeHoras = (agora - t.dataAberturaLocal.getTime()) / (1000 * 60 * 60)
+      if      (idadeHoras < 4)  result.menosDe4h++
+      else if (idadeHoras < 24) result.de4hA24h++
+      else if (idadeHoras < 72) result.de1A3dias++
+      else                      result.maisDe3dias++
+    })
+
+  return result
+}
+
+// ─── SLA por prioridade ───────────────────────────────────────────────────────
+export function calculateSLAByPrioridade(tickets: Ticket[]): PrioridadeStats[] {
+  const prioridades = ["Critico", "Alto", "Medio", "Baixo"] as const
+  const map: Record<string, Ticket[]> = { Critico: [], Alto: [], Medio: [], Baixo: [] }
+
+  tickets.forEach(t => map[t.prioridadeInferida].push(t))
+
+  return prioridades.map(p => {
+    const ts = map[p]
+    const withTime = ts.filter(t => t.tempoResolucao !== null)
+    const dentroPrazo = withTime.filter(t => t.dentroSLAPrioridade === true).length
+    const slaTarget = SLA_POR_PRIORIDADE[p]
+    const times = withTime.map(t => t.tempoResolucao as number)
+    const tma = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0
+
+    return {
+      prioridade: p,
+      total: ts.length,
+      dentroPrazo,
+      taxaSLA: withTime.length > 0 ? Math.round((dentroPrazo / withTime.length) * 100) : 0,
+      tma,
+      slaTarget,
+    }
+  })
+}
+
 // Parse date string — keep Z so JS converts UTC → local timezone automatically
 export function toBrazilTime(dateStr: string): Date {
   return new Date(dateStr)
@@ -128,13 +211,27 @@ export function calculateResolutionTime(abertura: string, encerrado: string | nu
 
 // Process raw tickets into enriched tickets
 export function processTickets(rawTickets: TicketRaw[]): Ticket[] {
-  return rawTickets.map(ticket => ({
-    ...ticket,
-    categoria: categorizeTicket(ticket.descricao),
-    tempoResolucao: calculateResolutionTime(ticket.dataabertura, ticket.dataencerrado),
-    dataAberturaLocal: toBrazilTime(ticket.dataabertura),
-    dataEncerradoLocal: ticket.dataencerrado ? toBrazilTime(ticket.dataencerrado) : null
-  }))
+  return rawTickets.map(ticket => {
+    const categoria = categorizeTicket(ticket.descricao)
+    const tempoResolucao = calculateResolutionTime(ticket.dataabertura, ticket.dataencerrado)
+    const mtta = calculateMTTA(ticket.dataabertura, ticket.menor_historico)
+    const prioridadeInferida = getPrioridadeInferida(categoria)
+    const slaTargetMinutes = getSLATargetByPrioridade(categoria)
+    const dentroSLAPrioridade =
+      tempoResolucao !== null ? tempoResolucao <= slaTargetMinutes : null
+
+    return {
+      ...ticket,
+      categoria,
+      tempoResolucao,
+      mtta,
+      prioridadeInferida,
+      slaTargetMinutes,
+      dentroSLAPrioridade,
+      dataAberturaLocal: toBrazilTime(ticket.dataabertura),
+      dataEncerradoLocal: ticket.dataencerrado ? toBrazilTime(ticket.dataencerrado) : null,
+    }
+  })
 }
 
 // Filter tickets by period
@@ -251,6 +348,18 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
   const topHour = Object.entries(hourCount).sort((a, b) => b[1] - a[1])[0]
   const horaPico = topHour ? parseInt(topHour[0]) : 0
   
+  // ── MTTA médio ───────────────────────────────────────────────────────────
+  const mttaTimes = tickets
+    .map(t => t.mtta)
+    .filter((v): v is number => v !== null)
+  const mtta = mttaTimes.length > 0
+    ? Math.round(mttaTimes.reduce((a, b) => a + b, 0) / mttaTimes.length)
+    : 0
+
+  // ── SLA por prioridade e backlog por idade ────────────────────────────────
+  const taxaSLAPrioridade = calculateSLAByPrioridade(tickets)
+  const backlogPorIdade   = calcularBacklogPorIdade(tickets)
+
   return {
     total: tickets.length,
     hoje,
@@ -270,6 +379,9 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
     taxaBacklog,
     taxaEscalacao,
     mediaDiariaTickets,
+    mtta,
+    taxaSLAPrioridade,
+    backlogPorIdade,
   }
 }
 
@@ -519,9 +631,15 @@ export function getSLAColor(value: number, type: "tma" | "taxa"): "green" | "yel
 
 // Get backlog status color
 export function getBacklogColor(backlog: number): "green" | "yellow" | "red" {
-  // imported inline to avoid circular dependency
-  if (backlog <= 30)  return "green"
-  if (backlog <= 60)  return "yellow"
+  if (backlog <= 30) return "green"
+  if (backlog <= 60) return "yellow"
+  return "red"
+}
+
+// Get MTTA status color
+export function getMTTAColor(mtta: number): "green" | "yellow" | "red" {
+  if (mtta <= MTTA_TARGET_MINUTES)  return "green"
+  if (mtta <= MTTA_WARNING_MINUTES) return "yellow"
   return "red"
 }
 
@@ -635,9 +753,12 @@ RESUMO DOS DADOS DO SUPORTE — CrisduLabs
 - Média diária de tickets: ${kpis.mediaDiariaTickets}
 ── KPIs ITIL ──
 - MTTR / TMA (Tempo Médio de Resolução): ${kpis.tma} min (meta: 120 min)
+- MTTA (Tempo Médio até 1ª interação): ${kpis.mtta} min (meta: 30 min)
 - Taxa SLA (% resolvidos no prazo): ${kpis.taxaSLA}% (meta: 85%)
+- SLA por prioridade: ${JSON.stringify(kpis.taxaSLAPrioridade.map(p => ({ p: p.prioridade, taxa: p.taxaSLA, total: p.total })))}
 - Violações de SLA: ${kpis.violacoesSLA}
 - Backlog atual (tickets em aberto): ${kpis.backlog} (${kpis.taxaBacklog}% do total)
+- Backlog por idade: <4h=${kpis.backlogPorIdade.menosDe4h} | 4h-24h=${kpis.backlogPorIdade.de4hA24h} | 1-3d=${kpis.backlogPorIdade.de1A3dias} | >3d=${kpis.backlogPorIdade.maisDe3dias}
 - Taxa de Escalação (Aguardando Aprovação): ${kpis.taxaEscalacao}%
 - Tickets críticos (>24h): ${kpis.criticalTickets}
 - Quick Wins (<15min): ${kpis.quickWins}%

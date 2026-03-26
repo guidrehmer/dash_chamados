@@ -9,7 +9,7 @@ import { KPICard } from "./kpi-card"
 import { StatusBadge } from "./status-badge"
 import type { Ticket, KPIData, HourlyData, DailyData } from "@/lib/support-types"
 import { formatTime, getSLAColor } from "@/lib/support-utils"
-import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2, UserX, ShieldAlert } from "lucide-react"
+import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2, UserX, ShieldAlert, AlertCircle, Inbox } from "lucide-react"
 import { STATUS_COLORS, CHART_COLOR_PRIMARY, RECENT_TICKETS_LIMIT } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -69,6 +69,8 @@ interface OverviewTabProps {
   kpis: KPIData
   hourlyData: HourlyData[]
   dailyData: DailyData[]
+  filaCount?: number       // tickets sem responsável (ao vivo, endpoint /fila/)
+  aguardandoCount?: number // tickets em aberto/atendimento (ao vivo, endpoint /aguardando/)
 }
 
 const chartConfig = {
@@ -94,7 +96,7 @@ const chartConfig = {
   }
 }
 
-export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTabProps) {
+export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 0, aguardandoCount = 0 }: OverviewTabProps) {
   const [hojeOpen, setHojeOpen] = useState(false)
   const [hojeLoading, setHojeLoading] = useState(false)
   const [hojeData, setHojeData] = useState<AtendimentoDia[]>([])
@@ -143,6 +145,40 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
 
   return (
     <div className="space-y-6">
+
+      {/* Alerta ao vivo: fila sem responsável */}
+      {filaCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <AlertCircle className="h-5 w-5 text-red-600 shrink-0 animate-pulse" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-800">
+              {filaCount} ticket{filaCount > 1 ? "s" : ""} na fila sem responsável atribuído
+            </p>
+            <p className="text-xs text-red-600 mt-0.5">
+              Atribua responsáveis para evitar violação de SLA
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <span className="text-xs text-red-600 font-medium">Ao vivo</span>
+          </div>
+        </div>
+      )}
+
+      {/* Situação atual (backlog ao vivo) */}
+      {aguardandoCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <Inbox className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">
+              {aguardandoCount} ticket{aguardandoCount > 1 ? "s" : ""} em aberto / em atendimento agora
+            </p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              Backlog atual — dados atualizados a cada minuto
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard

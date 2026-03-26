@@ -14,7 +14,7 @@ import { RecurrentTab } from "@/components/dashboard/recurrent-tab"
 import { SLATab } from "@/components/dashboard/sla-tab"
 import { AITab } from "@/components/dashboard/ai-tab"
 import { AnalysisTab } from "@/components/dashboard/analysis-tab"
-import type { TicketRaw, Ticket, PeriodFilter, GroupFilter } from "@/lib/support-types"
+import type { TicketRaw, Ticket, PeriodFilter, GroupFilter, FilaItem, AguardandoItem } from "@/lib/support-types"
 import {
   processTickets,
   filterByPeriod,
@@ -30,8 +30,8 @@ import {
   getTimeDistribution,
   buildAIContext
 } from "@/lib/support-utils"
-import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2, LineChart } from "lucide-react"
-import { FETCH_MAX_RETRIES, FETCH_RETRY_BASE_MS } from "@/lib/constants"
+import { RefreshCw, LayoutDashboard, BarChart3, Repeat, Clock, Bot, LogOut, Download, Loader2, LineChart, AlertCircle } from "lucide-react"
+import { FETCH_MAX_RETRIES, FETCH_RETRY_BASE_MS, LIVE_POLL_INTERVAL_MS } from "@/lib/constants"
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
@@ -145,6 +145,21 @@ export default function DashboardPage() {
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )
+
+  // ── Streams de dados ao vivo ──────────────────────────────────────────────
+  const { data: filaData } = useSWR<{ items: FilaItem[]; total: number }>(
+    autenticado ? "/api/fila" : null,
+    fetcher,
+    { refreshInterval: LIVE_POLL_INTERVAL_MS, revalidateOnFocus: false }
+  )
+  const { data: aguardandoData } = useSWR<{ items: AguardandoItem[]; total: number }>(
+    autenticado ? "/api/aguardando" : null,
+    fetcher,
+    { refreshInterval: LIVE_POLL_INTERVAL_MS, revalidateOnFocus: false }
+  )
+
+  const filaCount     = filaData?.total     ?? 0
+  const aguardandoCount = aguardandoData?.total ?? 0
 
   // Progressive background loading
   const [accumulatedItems, setAccumulatedItems] = useState<TicketRaw[]>([])
@@ -490,6 +505,15 @@ export default function DashboardPage() {
                     </span>
                   </>
                 )}
+                {filaCount > 0 && (
+                  <>
+                    <span className="text-slate-300">|</span>
+                    <span className="flex items-center gap-1 text-red-700 font-semibold animate-pulse">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {filaCount} na fila sem responsável
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -528,6 +552,8 @@ export default function DashboardPage() {
                   kpis={kpis}
                   hourlyData={hourlyData}
                   dailyData={dailyData}
+                  filaCount={filaCount}
+                  aguardandoCount={aguardandoCount}
                 />
               </TabsContent>
 

@@ -23,6 +23,10 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     responsavel: "João Silva",
     categoria: "Acesso / Login",
     tempoResolucao: 120,
+    mtta: null,
+    prioridadeInferida: "Alto",
+    slaTargetMinutes: 480,
+    dentroSLAPrioridade: true,
     dataAberturaLocal: new Date("2024-03-15T10:00:00Z"),
     dataEncerradoLocal: new Date("2024-03-15T12:00:00Z"),
   }

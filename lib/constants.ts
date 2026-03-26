@@ -11,6 +11,10 @@ export const SLA_RATE_WARNING = 70  // % ≥ este valor: amarelo; abaixo: vermel
 export const TMA_GREEN_MAX  = 60   // minutos — TMA ≤ 60 min: verde
 export const TMA_YELLOW_MAX = 120  // minutos — TMA 61-120 min: amarelo; >120: vermelho
 
+/** MTTA — Mean Time To Acknowledge (primeira interação no ticket) */
+export const MTTA_TARGET_MINUTES  = 30   // ≤ 30 min: verde
+export const MTTA_WARNING_MINUTES = 60   // 31–60 min: amarelo; > 60 min: vermelho
+
 /** FCR — First Call Resolution: meta percentual */
 export const FCR_TARGET = 80       // % de tickets resolvidos sem reabertura (referência ITIL)
 
@@ -24,6 +28,45 @@ export const CRITICAL_HOURS = 24       // horas — atendimentos críticos (+24h
 
 /** Tempo máximo válido para considerar uma resolução (em dias) */
 export const MAX_RESOLUTION_DAYS = 30
+
+/** SLA por prioridade inferida (em minutos) */
+export const SLA_POR_PRIORIDADE: Record<string, number> = {
+  Critico: 4  * 60,   // 240 min
+  Alto:    8  * 60,   // 480 min
+  Medio:   24 * 60,   // 1440 min
+  Baixo:   72 * 60,   // 4320 min
+}
+
+/** Mapeamento de categoria → prioridade inferida */
+export const PRIORIDADE_POR_CATEGORIA: Record<string, "Critico" | "Alto" | "Medio" | "Baixo"> = {
+  "Erro / Falha do Sistema":       "Critico",
+  "Sync / Sincronização":          "Critico",
+  "Acesso / Login":                "Alto",
+  "Pedidos / Integração":          "Alto",
+  "Notas / Acerto":                "Alto",
+  "Tablet":                        "Medio",
+  "Cadastro":                      "Medio",
+  "Gestão de Distribuidor":        "Medio",
+  "Liberação / Permissão":         "Medio",
+  "Financeiro / Faturamento":      "Medio",
+  "Configuração / Parametrização": "Medio",
+  "Semanas / Campanha":            "Baixo",
+  "Impressão / Hardware":          "Baixo",
+  "Relatório / Consulta":          "Baixo",
+  "Dúvida / Treinamento":          "Baixo",
+  "Outros":                        "Baixo",
+}
+
+/** Cores de cada prioridade */
+export const PRIORIDADE_COLORS: Record<string, string> = {
+  Critico: "#ef4444",
+  Alto:    "#f97316",
+  Medio:   "#f59e0b",
+  Baixo:   "#3b82f6",
+}
+
+/** Polling interval para endpoints de tempo real (ms) */
+export const LIVE_POLL_INTERVAL_MS = 60_000   // 1 minuto
 
 // ─── Paginação / limites de tabela ───────────────────────────────────────────
 export const VIOLATIONS_PER_PAGE = 20

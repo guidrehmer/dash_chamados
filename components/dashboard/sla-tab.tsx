@@ -7,10 +7,10 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Cell, ComposedChart, Legend } from "recharts"
 import { KPICard } from "./kpi-card"
 import type { Ticket, KPIData, DailyData, TimeDistribution } from "@/lib/support-types"
-import { formatTime, truncateText, getSLAColor, getBacklogColor, getSLAViolations } from "@/lib/support-utils"
-import { Clock, Target, AlertTriangle, Zap, TrendingUp, Inbox, GitBranch, BarChart2 } from "lucide-react"
+import { formatTime, truncateText, getSLAColor, getBacklogColor, getMTTAColor, getSLAViolations } from "@/lib/support-utils"
+import { Clock, Target, AlertTriangle, Zap, TrendingUp, Inbox, GitBranch, BarChart2, Timer, ShieldCheck } from "lucide-react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { SLA_TARGET_MINUTES, SLA_RATE_TARGET, CHART_COLOR_PRIMARY, CHART_COLOR_SECONDARY, FCR_TARGET } from "@/lib/constants"
+import { SLA_TARGET_MINUTES, SLA_RATE_TARGET, CHART_COLOR_PRIMARY, CHART_COLOR_SECONDARY, FCR_TARGET, MTTA_TARGET_MINUTES, PRIORIDADE_COLORS } from "@/lib/constants"
 
 interface SLATabProps {
   tickets: Ticket[]
@@ -57,14 +57,21 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
 
   return (
     <div className="space-y-6">
-      {/* SLA KPIs */}
+      {/* MTTR + MTTA + SLA + Quick Wins */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
-          title="Tempo Medio (TMA)"
+          title="MTTR — Tempo Médio"
           value={formatTime(kpis.tma)}
-          subtitle={`Meta: ${SLA_TARGET_MINUTES}min`}
+          subtitle={`Meta ITIL: ${SLA_TARGET_MINUTES}min`}
           icon={<Clock className="h-4 w-4" />}
           status={getSLAColor(kpis.tma, "tma")}
+        />
+        <KPICard
+          title="MTTA — 1ª Interação"
+          value={kpis.mtta > 0 ? formatTime(kpis.mtta) : "—"}
+          subtitle={`Meta: ${MTTA_TARGET_MINUTES}min · tempo até 1º toque`}
+          icon={<Timer className="h-4 w-4" />}
+          status={kpis.mtta > 0 ? getMTTAColor(kpis.mtta) : "green"}
         />
         <KPICard
           title="Taxa de SLA"
@@ -72,13 +79,6 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
           subtitle={`Meta: ${SLA_RATE_TARGET}%`}
           icon={<Target className="h-4 w-4" />}
           status={getSLAColor(kpis.taxaSLA, "taxa")}
-        />
-        <KPICard
-          title="Tempo Maximo"
-          value={formatTime(kpis.tempoMaximo)}
-          subtitle="Pior caso registrado"
-          icon={<AlertTriangle className="h-4 w-4" />}
-          status={kpis.tempoMaximo > 240 ? "red" : kpis.tempoMaximo > 120 ? "yellow" : "green"}
         />
         <KPICard
           title="Quick Wins"
@@ -89,8 +89,8 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
         />
       </div>
 
-      {/* ITIL KPIs adicionais */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Backlog + Escalação + Média Diária */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title="Backlog (ITIL)"
           value={kpis.backlog.toString()}
@@ -101,9 +101,16 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
         <KPICard
           title="Taxa de Escalação"
           value={`${kpis.taxaEscalacao}%`}
-          subtitle="Em Aguardando Aprovação"
+          subtitle="Aguardando Aprovação"
           icon={<GitBranch className="h-4 w-4" />}
           status={kpis.taxaEscalacao <= 5 ? "green" : kpis.taxaEscalacao <= 15 ? "yellow" : "red"}
+        />
+        <KPICard
+          title="Tempo Máximo"
+          value={formatTime(kpis.tempoMaximo)}
+          subtitle="Pior caso registrado"
+          icon={<AlertTriangle className="h-4 w-4" />}
+          status={kpis.tempoMaximo > 240 ? "red" : kpis.tempoMaximo > 120 ? "yellow" : "green"}
         />
         <KPICard
           title="Média Diária"
@@ -113,6 +120,88 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
           status="green"
         />
       </div>
+
+      {/* SLA por Prioridade */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-medium flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            SLA por Prioridade Inferida
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {kpis.taxaSLAPrioridade.map(p => (
+              <div key={p.prioridade} className="flex items-center gap-3">
+                <div className="w-20 shrink-0 flex items-center gap-2">
+                  <span
+                    className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: PRIORIDADE_COLORS[p.prioridade] }}
+                  />
+                  <span className="text-sm font-medium">{p.prioridade}</span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>{p.total} tickets · TMA {formatTime(p.tma)} · meta {formatTime(p.slaTarget)}</span>
+                    <span className={`font-semibold ${p.taxaSLA >= 85 ? "text-emerald-600" : p.taxaSLA >= 70 ? "text-amber-600" : "text-red-600"}`}>
+                      {p.taxaSLA}%
+                    </span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${p.taxaSLA}%`,
+                        backgroundColor: p.taxaSLA >= 85 ? "#10b981" : p.taxaSLA >= 70 ? "#f59e0b" : "#ef4444"
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Backlog por Idade */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-medium flex items-center gap-2">
+            <Inbox className="h-4 w-4" />
+            Backlog por Idade (tickets em aberto)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={chartConfig} className="h-[200px] w-full">
+            <BarChart
+              data={[
+                { faixa: "< 4h",    quantidade: kpis.backlogPorIdade.menosDe4h,  fill: "#10b981" },
+                { faixa: "4h–24h",  quantidade: kpis.backlogPorIdade.de4hA24h,   fill: "#f59e0b" },
+                { faixa: "1–3 dias",quantidade: kpis.backlogPorIdade.de1A3dias,  fill: "#f97316" },
+                { faixa: "> 3 dias",quantidade: kpis.backlogPorIdade.maisDe3dias,fill: "#ef4444" },
+              ]}
+              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="faixa" tick={{ fontSize: 12 }} tickLine={false} />
+              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="quantidade" radius={[4, 4, 0, 0]}>
+                {[
+                  "#10b981", "#f59e0b", "#f97316", "#ef4444"
+                ].map((color, index) => (
+                  <Cell key={index} fill={color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ChartContainer>
+          {kpis.backlogPorIdade.maisDe3dias > 0 && (
+            <p className="text-xs text-red-600 font-medium mt-2 text-center">
+              ⚠ {kpis.backlogPorIdade.maisDe3dias} ticket(s) aguardando há mais de 3 dias
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* TMA por Dia */}
       <Card>
