@@ -90,14 +90,20 @@ export function Sidebar({
         )}
       >
         {collapsed ? (
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">C</span>
-          </div>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src="/favicon.png"
+            alt="CrisduLabs"
+            className="w-8 h-8 rounded-lg object-cover"
+          />
         ) : (
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-              <span className="text-white font-bold text-sm">C</span>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/favicon.png"
+              alt="CrisduLabs"
+              className="w-8 h-8 rounded-lg object-cover shrink-0"
+            />
             <div className="leading-tight overflow-hidden">
               <p className="text-sm font-semibold text-slate-900 truncate">
                 CrisduLabs
