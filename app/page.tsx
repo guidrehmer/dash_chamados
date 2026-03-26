@@ -14,6 +14,7 @@ import { RecurrentTab } from "@/components/dashboard/recurrent-tab"
 import { SLATab } from "@/components/dashboard/sla-tab"
 import { AITab } from "@/components/dashboard/ai-tab"
 import { AnalysisTab } from "@/components/dashboard/analysis-tab"
+import { FilaTab } from "@/components/dashboard/fila-tab"
 import type { TicketRaw, Ticket, PeriodFilter, GroupFilter, FilaItem, AguardandoItem } from "@/lib/support-types"
 import {
   processTickets,
@@ -508,8 +509,17 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* Fila por Usuário — uses live data, renders independently */}
+          {activeSection === "fila" && (
+            <FilaTab
+              items={aguardandoData?.items ?? []}
+              isLoading={!aguardandoData}
+              lastUpdate={aguardandoData ? new Date().toLocaleString("pt-BR") : null}
+            />
+          )}
+
           {/* Content per section */}
-          {data && !error && (
+          {activeSection !== "fila" && data && !error && (
             <>
               {activeSection === "overview" && (
                 <OverviewTab

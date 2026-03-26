@@ -68,6 +68,19 @@ export const PRIORIDADE_COLORS: Record<string, string> = {
 /** Polling interval para endpoints de tempo real (ms) */
 export const LIVE_POLL_INTERVAL_MS = 60_000   // 1 minuto
 
+// ─── Fila por usuário — thresholds de carga ───────────────────────────────────
+/** Tickets em fila por usuário: faixas de risco */
+export const FILA_USER_OK       = 5   // ≤ 5: carga normal (verde)
+export const FILA_USER_WARNING  = 10  // 6–10: atenção (amarelo)
+                                       // > 10: sobrecarga (vermelho)
+
+/** Palette para donut/pie — fila por usuário (até 12 usuários) */
+export const FILA_DONUT_COLORS = [
+  "#1a56db", "#3b82f6", "#60a5fa", "#10b981", "#34d399",
+  "#f59e0b", "#fbbf24", "#f97316", "#ef4444", "#8b5cf6",
+  "#ec4899", "#6b7280",
+] as const
+
 // ─── Paginação / limites de tabela ───────────────────────────────────────────
 export const VIOLATIONS_PER_PAGE = 20
 export const CATEGORY_EXAMPLES_PER_PAGE = 4

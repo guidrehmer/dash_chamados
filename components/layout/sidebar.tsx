@@ -11,13 +11,13 @@ import {
   LayoutDashboard,
   BarChart3,
   Repeat,
-  Clock,
   Bot,
   LineChart,
   ChevronLeft,
   ChevronRight,
   X,
   ShieldCheck,
+  Users,
 } from "lucide-react"
 
 // ─── Nav item types ───────────────────────────────────────────────────────────
@@ -26,6 +26,7 @@ export type NavSection =
   | "sla"
   | "ranking"
   | "recurrent"
+  | "fila"
   | "ai"
   | "analysis"
 
@@ -36,12 +37,13 @@ interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: "overview",  label: "Visão Geral",  icon: LayoutDashboard },
-  { id: "sla",       label: "SLA & ITIL",   icon: ShieldCheck },
-  { id: "ranking",   label: "Ranking",       icon: BarChart3 },
-  { id: "recurrent", label: "Recorrentes",   icon: Repeat },
-  { id: "ai",        label: "IA Assistente", icon: Bot },
-  { id: "analysis",  label: "Análises CSV",  icon: LineChart },
+  { id: "overview",  label: "Visão Geral",      icon: LayoutDashboard },
+  { id: "sla",       label: "SLA & ITIL",        icon: ShieldCheck },
+  { id: "ranking",   label: "Ranking",            icon: BarChart3 },
+  { id: "recurrent", label: "Recorrentes",        icon: Repeat },
+  { id: "fila",      label: "Fila por Usuário",   icon: Users },
+  { id: "ai",        label: "IA Assistente",      icon: Bot },
+  { id: "analysis",  label: "Análises CSV",       icon: LineChart },
 ]
 
 export const NAV_LABELS: Record<NavSection, string> = {
@@ -49,6 +51,7 @@ export const NAV_LABELS: Record<NavSection, string> = {
   sla:       "SLA & ITIL",
   ranking:   "Ranking",
   recurrent: "Recorrentes",
+  fila:      "Fila por Usuário",
   ai:        "IA Assistente",
   analysis:  "Análises CSV",
 }
