@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-const LOGIN_URL = "https://sistema.romancemoda.com.br/apex/romance/company/login"
+const LOGIN_URL = "https://sistema.romancemoda.com.br/apex/romance/aistein/login"
 
 export async function POST(request: Request) {
   const { usuario, senha } = await request.json()

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import type { FilaItem } from "@/lib/support-types"
 
-const BASE_URL = "https://sistema.romancemoda.com.br/apex/romance/company/fila/"
+const BASE_URL = "https://sistema.romancemoda.com.br/apex/romance/aistein/fila/"
 const SAFETY_LIMIT = 2000
 
 /**

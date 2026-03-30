@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import type { AguardandoItem } from "@/lib/support-types"
 
-const BASE_URL = "https://sistema.romancemoda.com.br/apex/romance/company/aguardando/"
+const BASE_URL = "https://sistema.romancemoda.com.br/apex/romance/aistein/aguardando/"
 const SAFETY_LIMIT = 5000
 
 /**
