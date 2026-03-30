@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import type { TicketRaw, APIResponse } from "@/lib/support-types"
 
-const BASE_URL = "https://sistema.romancemoda.com.br/apex/romance/aistein/suporte/"
+const BASE_URL = "https://sistema.romancemoda.com.br/apex/romance/aisten/suporte/"
 const BATCH_ITEMS = 500 // itens por lote (20 páginas de 25)
 const SAFETY_LIMIT = 50000 // limite absoluto de segurança
 
