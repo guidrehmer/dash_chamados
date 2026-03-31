@@ -27,7 +27,7 @@ interface AtendimentoDia {
 }
 
 async function fetchAtendimentosHoje(): Promise<AtendimentoDia[]> {
-  const BASE = "https://sistema.romancemoda.com.br/apex/romance/company/atendimentos/"
+  const BASE = "https://sistema.romancemoda.com.br/apex/romance/aisten/atendimentos/"
   const all: AtendimentoDia[] = []
   let offset = 0
   let hasMore = true
