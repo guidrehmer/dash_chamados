@@ -20,6 +20,7 @@ export interface FilaItem {
 
 /** Item retornado pelo endpoint /aguardando/ (em aberto/atendimento) */
 export interface AguardandoItem {
+  nr_chamado: string | number | null
   dataabertura: string
   dataencerrado: string | null
   descricao: string

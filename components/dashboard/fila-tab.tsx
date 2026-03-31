@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import React, { useMemo, useState } from "react"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip as ReTooltip,
   PieChart, Pie, Legend, ResponsiveContainer,
@@ -417,10 +417,9 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
                   const isExpanded = expandedUser === s.nome
                   const agora = Date.now()
                   return (
-                    <>
+                    <React.Fragment key={s.nome}>
                       {/* ── Linha do usuário ── */}
                       <tr
-                        key={s.nome}
                         onClick={() => toggleUser(s.nome)}
                         className={cn(
                           "border-b border-slate-50 transition-colors cursor-pointer select-none",
@@ -514,6 +513,7 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
                                 <table className="w-full text-xs">
                                   <thead>
                                     <tr className="bg-blue-50 border-b border-blue-100 text-slate-500 font-medium">
+                                      <th className="text-center px-3 py-2 w-20">Nº</th>
                                       <th className="text-left px-3 py-2">Descrição</th>
                                       <th className="text-center px-3 py-2 w-28">Grupo</th>
                                       <th className="text-center px-3 py-2 w-36">Situação</th>
@@ -539,6 +539,12 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
                                               ti % 2 === 0 ? "bg-white" : "bg-slate-50/60"
                                             )}
                                           >
+                                            <td className="px-3 py-2 text-center">
+                                              {t.nr_chamado != null
+                                                ? <span className="font-mono font-semibold text-blue-700">#{t.nr_chamado}</span>
+                                                : <span className="text-slate-300">—</span>
+                                              }
+                                            </td>
                                             <td className="px-3 py-2 text-slate-700 max-w-xs">
                                               <span className="line-clamp-2 leading-relaxed">
                                                 {t.descricao || <em className="text-slate-400">Sem descrição</em>}
@@ -565,7 +571,7 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   )
                 })}
               </tbody>
