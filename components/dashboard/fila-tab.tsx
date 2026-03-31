@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { KPICard } from "@/components/dashboard/kpi-card"
 import type { AguardandoItem } from "@/lib/support-types"
 import {
-  Users, AlertTriangle, Clock, UserX,
+  Users, AlertTriangle, Clock,
   ArrowUpDown, ArrowDown, ArrowUp, RefreshCw,
   ChevronDown, ChevronRight,
 } from "lucide-react"
@@ -168,7 +168,6 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
     })
   }, [stats, sortKey, sortDir, filterNivel])
 
-  const semAtrib   = useMemo(() => stats.find(s => s.nome === "Sem atribuição")?.total ?? 0, [stats])
   const maiorCarga = useMemo(() => stats.filter(s => s.nome !== "Sem atribuição")[0], [stats])
   const mediaGeral = useMemo(() => {
     const vals = stats.map(s => s.idadeMediaHoras)
@@ -221,20 +220,13 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
       )}
 
       {/* ── KPI cards ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <KPICard
           title="Total na Fila"
           value={items.length}
           subtitle={`${stats.length} usuário(s) com chamados`}
           icon={<Users className="h-4 w-4" />}
           status="neutral"
-        />
-        <KPICard
-          title="Sem Atribuição"
-          value={semAtrib}
-          subtitle="Chamados sem responsável"
-          icon={<UserX className="h-4 w-4" />}
-          status={semAtrib === 0 ? "green" : semAtrib <= 5 ? "yellow" : "red"}
         />
         <KPICard
           title="Maior Carga"
