@@ -4,7 +4,7 @@ export interface TicketRaw {
   dataencerrado: string | null
   descricao: string
   situacao: "Encerrado" | "Em Atendimento" | "Aguardando Aprovação" | "Aberto"
-  grupo: "SISTEMAS" | "CIT"
+  grupo: "SISTEMAS" | "CIT" | "IA"
   responsavel: string | null
 }
 
@@ -29,8 +29,8 @@ export interface APIResponse {
   hasMore: boolean
 }
 
-export type PeriodFilter = "hoje" | "semana" | "mes" | "todos"
-export type GroupFilter = "TODOS" | "SISTEMAS" | "CIT"
+export type PeriodFilter = "hoje" | "semana" | "mes" | "personalizado" | "todos"
+export type GroupFilter = "TODOS" | "SISTEMAS" | "CIT" | "IA"
 
 export interface KPIData {
   total: number
@@ -45,6 +45,8 @@ export interface KPIData {
   categoriaMaisRecorrente: { nome: string; percentual: number }
   horaPico: number
   violacoesSLA: number
+  criticalTickets: number // tickets que levaram mais de 24h
+  semResponsavel: number  // tickets sem responsável atribuído
 }
 
 export interface CategoryStats {
