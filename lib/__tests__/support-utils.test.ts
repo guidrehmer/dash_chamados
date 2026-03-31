@@ -104,10 +104,11 @@ describe("filterByGroup", () => {
     makeTicket({ grupo: "SISTEMAS" }),
     makeTicket({ grupo: "CIT" }),
     makeTicket({ grupo: "SISTEMAS" }),
+    makeTicket({ grupo: "IA" }),
   ]
 
   it("retorna todos quando filtro é TODOS", () => {
-    expect(filterByGroup(tickets, "TODOS")).toHaveLength(3)
+    expect(filterByGroup(tickets, "TODOS")).toHaveLength(4)
   })
 
   it("filtra por SISTEMAS", () => {
@@ -120,6 +121,12 @@ describe("filterByGroup", () => {
     const result = filterByGroup(tickets, "CIT")
     expect(result).toHaveLength(1)
     expect(result[0].grupo).toBe("CIT")
+  })
+
+  it("filtra por IA", () => {
+    const result = filterByGroup(tickets, "IA")
+    expect(result).toHaveLength(1)
+    expect(result[0].grupo).toBe("IA")
   })
 })
 

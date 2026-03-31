@@ -4,7 +4,7 @@ export interface TicketRaw {
   dataencerrado: string | null
   descricao: string
   situacao: "Encerrado" | "Em Atendimento" | "Aguardando Aprovação" | "Aberto"
-  grupo: "SISTEMAS" | "CIT"
+  grupo: "SISTEMAS" | "CIT" | "IA"
   responsavel: string | null
   /** Timestamp da primeira interação no ticket — base de cálculo do MTTA */
   menor_historico?: string | null
@@ -55,7 +55,7 @@ export interface APIResponse {
 }
 
 export type PeriodFilter = "hoje" | "semana" | "mes" | "personalizado" | "todos"
-export type GroupFilter = "TODOS" | "SISTEMAS" | "CIT"
+export type GroupFilter = "TODOS" | "SISTEMAS" | "CIT" | "IA"
 
 export interface KPIData {
   total: number

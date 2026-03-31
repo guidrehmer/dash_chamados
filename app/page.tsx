@@ -408,6 +408,7 @@ export default function DashboardPage() {
                   <SelectItem value="TODOS">Todos</SelectItem>
                   <SelectItem value="SISTEMAS">Sistemas</SelectItem>
                   <SelectItem value="CIT">CIT</SelectItem>
+                  <SelectItem value="IA">IA</SelectItem>
                 </SelectContent>
               </Select>
 

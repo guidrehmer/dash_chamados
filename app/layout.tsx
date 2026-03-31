@@ -8,7 +8,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: 'Dashboard de Suporte - CrisduLabs',
-  description: 'Monitoramento de atendimentos de suporte de Sistemas e CIT',
+  description: 'Monitoramento de atendimentos de suporte de Sistemas, CIT e IA',
   generator: 'v0.app',
   icons: {
     icon: '/favicon.png',
