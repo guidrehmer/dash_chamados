@@ -282,10 +282,10 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 
         />
         <KPICard
           title="Sem Responsável"
-          value={kpis.semResponsavel}
-          subtitle="Não atribuídos"
+          value={filaCount}
+          subtitle="Ao vivo · sem atribuição"
           icon={<UserX className="h-4 w-4" />}
-          status={kpis.semResponsavel === 0 ? "green" : kpis.semResponsavel <= 5 ? "yellow" : "red"}
+          status={filaCount === 0 ? "green" : filaCount <= 5 ? "yellow" : "red"}
         />
         <KPICard
           title="Casos Críticos"
