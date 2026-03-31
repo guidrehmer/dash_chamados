@@ -11,6 +11,7 @@ import type { AguardandoItem } from "@/lib/support-types"
 import {
   Users, AlertTriangle, Clock, UserX,
   ArrowUpDown, ArrowDown, ArrowUp, RefreshCw,
+  ChevronDown, ChevronRight,
 } from "lucide-react"
 import { FILA_USER_OK, FILA_USER_WARNING, FILA_DONUT_COLORS } from "@/lib/constants"
 import { cn } from "@/lib/utils"
@@ -142,6 +143,10 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
   const [sortKey, setSortKey]   = useState<SortKey>("total")
   const [sortDir, setSortDir]   = useState<SortDir>("desc")
   const [filterNivel, setFilterNivel] = useState<NivelCarga | "todos">("todos")
+  const [expandedUser, setExpandedUser] = useState<string | null>(null)
+
+  const toggleUser = (nome: string) =>
+    setExpandedUser(prev => prev === nome ? null : nome)
 
   // ── Derived data ─────────────────────────────────────────────────────────
   const stats = useMemo(() => transformFila(items), [items])
@@ -371,6 +376,7 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className="w-8 px-2 py-2.5" />
                   <th className="text-left px-4 py-2.5 font-medium text-slate-600">
                     <button
                       onClick={() => toggleSort("nome")}
@@ -403,86 +409,165 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
               <tbody>
                 {sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-muted-foreground text-sm">
+                    <td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">
                       Nenhum usuário encontrado para este filtro.
                     </td>
                   </tr>
-                ) : sorted.map((s, i) => (
-                  <tr
-                    key={s.nome}
-                    className={cn(
-                      "border-b border-slate-50 transition-colors",
-                      i % 2 === 0 ? "bg-white" : "bg-slate-50/40",
-                      s.nivel === "critico" && "bg-red-50/40",
-                      "hover:bg-blue-50/40"
-                    )}
-                  >
-                    {/* Nome */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: NIVEL_COLORS[s.nivel] }}
-                        />
-                        <span className={cn(
-                          "font-medium",
-                          s.nome === "Sem atribuição" ? "text-slate-400 italic" : "text-slate-800"
-                        )}>
-                          {s.nome}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Total */}
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="font-semibold text-slate-800">{s.total}</span>
-                        {/* Inline mini bar */}
-                        <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${s.percentual}%`,
-                              backgroundColor: NIVEL_COLORS[s.nivel],
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* % */}
-                    <td className="px-4 py-3 text-center text-slate-600">{s.percentual}%</td>
-
-                    {/* Espera média */}
-                    <td className="px-4 py-3 text-center">
-                      <span className={cn(
-                        "font-medium",
-                        s.idadeMediaHoras <= 4  ? "text-emerald-600" :
-                        s.idadeMediaHoras <= 24 ? "text-amber-600"   : "text-red-600"
-                      )}>
-                        {formatHoras(s.idadeMediaHoras)}
-                      </span>
-                    </td>
-
-                    {/* Ticket mais antigo */}
-                    <td className="px-4 py-3 text-center text-slate-500 text-xs">
-                      {formatHoras(s.idadeMaximaHoras)}
-                    </td>
-
-                    {/* Status badge */}
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
-                        style={{
-                          backgroundColor: NIVEL_COLORS[s.nivel] + "20",
-                          color: NIVEL_COLORS[s.nivel],
-                        }}
+                ) : sorted.map((s, i) => {
+                  const isExpanded = expandedUser === s.nome
+                  const agora = Date.now()
+                  return (
+                    <>
+                      {/* ── Linha do usuário ── */}
+                      <tr
+                        key={s.nome}
+                        onClick={() => toggleUser(s.nome)}
+                        className={cn(
+                          "border-b border-slate-50 transition-colors cursor-pointer select-none",
+                          i % 2 === 0 ? "bg-white" : "bg-slate-50/40",
+                          s.nivel === "critico" && "bg-red-50/40",
+                          isExpanded ? "bg-blue-50/60 border-blue-100" : "hover:bg-blue-50/40"
+                        )}
                       >
-                        {NIVEL_LABELS[s.nivel]}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                        {/* Chevron */}
+                        <td className="px-2 py-3 text-slate-400">
+                          {isExpanded
+                            ? <ChevronDown className="h-4 w-4 text-blue-500" />
+                            : <ChevronRight className="h-4 w-4" />
+                          }
+                        </td>
+
+                        {/* Nome */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: NIVEL_COLORS[s.nivel] }}
+                            />
+                            <span className={cn(
+                              "font-medium",
+                              s.nome === "Sem atribuição" ? "text-slate-400 italic" : "text-slate-800"
+                            )}>
+                              {s.nome}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Total */}
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="font-semibold text-slate-800">{s.total}</span>
+                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${s.percentual}%`,
+                                  backgroundColor: NIVEL_COLORS[s.nivel],
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* % */}
+                        <td className="px-4 py-3 text-center text-slate-600">{s.percentual}%</td>
+
+                        {/* Espera média */}
+                        <td className="px-4 py-3 text-center">
+                          <span className={cn(
+                            "font-medium",
+                            s.idadeMediaHoras <= 4  ? "text-emerald-600" :
+                            s.idadeMediaHoras <= 24 ? "text-amber-600"   : "text-red-600"
+                          )}>
+                            {formatHoras(s.idadeMediaHoras)}
+                          </span>
+                        </td>
+
+                        {/* Ticket mais antigo */}
+                        <td className="px-4 py-3 text-center text-slate-500 text-xs">
+                          {formatHoras(s.idadeMaximaHoras)}
+                        </td>
+
+                        {/* Status badge */}
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+                            style={{
+                              backgroundColor: NIVEL_COLORS[s.nivel] + "20",
+                              color: NIVEL_COLORS[s.nivel],
+                            }}
+                          >
+                            {NIVEL_LABELS[s.nivel]}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {/* ── Expand: chamados do usuário ── */}
+                      {isExpanded && (
+                        <tr key={`${s.nome}-detail`} className="bg-blue-50/30">
+                          <td colSpan={7} className="px-6 py-0">
+                            <div className="py-3 border-l-2 border-blue-200 pl-4">
+                              <p className="text-xs font-semibold text-blue-700 mb-2 uppercase tracking-wide">
+                                {s.total} chamado{s.total !== 1 ? "s" : ""} em fila — {s.nome}
+                              </p>
+                              <div className="overflow-x-auto rounded-lg border border-blue-100">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-blue-50 border-b border-blue-100 text-slate-500 font-medium">
+                                      <th className="text-left px-3 py-2">Descrição</th>
+                                      <th className="text-center px-3 py-2 w-28">Grupo</th>
+                                      <th className="text-center px-3 py-2 w-36">Situação</th>
+                                      <th className="text-center px-3 py-2 w-24">Idade</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {[...s.tickets]
+                                      .sort((a, b) =>
+                                        new Date(a.dataabertura).getTime() - new Date(b.dataabertura).getTime()
+                                      )
+                                      .map((t, ti) => {
+                                        const ms = agora - new Date(t.dataabertura).getTime()
+                                        const horas = ms > 0 ? ms / (1000 * 60 * 60) : 0
+                                        const idadeColor =
+                                          horas <= 4  ? "text-emerald-600" :
+                                          horas <= 24 ? "text-amber-600"   : "text-red-600"
+                                        return (
+                                          <tr
+                                            key={ti}
+                                            className={cn(
+                                              "border-b border-blue-50 last:border-0",
+                                              ti % 2 === 0 ? "bg-white" : "bg-slate-50/60"
+                                            )}
+                                          >
+                                            <td className="px-3 py-2 text-slate-700 max-w-xs">
+                                              <span className="line-clamp-2 leading-relaxed">
+                                                {t.descricao || <em className="text-slate-400">Sem descrição</em>}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                                                {t.grupo}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-center text-slate-500">
+                                              {t.situacao}
+                                            </td>
+                                            <td className={cn("px-3 py-2 text-center font-semibold", idadeColor)}>
+                                              {formatHoras(Math.round(horas * 10) / 10)}
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )
+                })}
               </tbody>
             </table>
           </div>
