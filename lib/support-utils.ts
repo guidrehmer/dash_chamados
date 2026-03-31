@@ -610,6 +610,53 @@ export function getWeekComparison(tickets: Ticket[]): { current: number; previou
   return { current, previous, delta, percentChange }
 }
 
+export interface WeekComparisonPoint {
+  label: string        // "DD/MM"
+  anoAtual: number
+  anoAnterior: number
+}
+
+/** Retorna os dados das últimas 20 semanas (seg–dom) com comparativo YoY */
+export function getLast20WeeksComparison(tickets: Ticket[]): WeekComparisonPoint[] {
+  const now = new Date()
+
+  // Início da semana atual (segunda-feira)
+  const dayOfWeek = now.getDay()
+  const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  const startOfCurrentWeek = new Date(now)
+  startOfCurrentWeek.setDate(now.getDate() - diff)
+  startOfCurrentWeek.setHours(0, 0, 0, 0)
+
+  const result: WeekComparisonPoint[] = []
+
+  for (let i = 19; i >= 0; i--) {
+    const weekStart = new Date(startOfCurrentWeek)
+    weekStart.setDate(weekStart.getDate() - i * 7)
+
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekEnd.getDate() + 7)
+
+    const prevYearStart = new Date(weekStart)
+    prevYearStart.setFullYear(prevYearStart.getFullYear() - 1)
+    const prevYearEnd = new Date(weekEnd)
+    prevYearEnd.setFullYear(prevYearEnd.getFullYear() - 1)
+
+    const anoAtual = tickets.filter(
+      t => t.dataAberturaLocal >= weekStart && t.dataAberturaLocal < weekEnd
+    ).length
+
+    const anoAnterior = tickets.filter(
+      t => t.dataAberturaLocal >= prevYearStart && t.dataAberturaLocal < prevYearEnd
+    ).length
+
+    const label = `${weekStart.getDate().toString().padStart(2, "0")}/${(weekStart.getMonth() + 1).toString().padStart(2, "0")}`
+
+    result.push({ label, anoAtual, anoAnterior })
+  }
+
+  return result
+}
+
 // Truncate text
 export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text

@@ -4,9 +4,9 @@ import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, ComposedChart, Line, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import type { Ticket, CategoryStats } from "@/lib/support-types"
-import { formatTime, getWeekComparison, calculateResponsavelStats } from "@/lib/support-utils"
+import { formatTime, getWeekComparison, calculateResponsavelStats, getLast20WeeksComparison } from "@/lib/support-utils"
 import { TrendingUp, TrendingDown, Minus, Award, Clock, AlertCircle, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CHART_COLORS_BLUE, CHART_COLOR_PRIMARY, CATEGORY_CHART_LIMIT } from "@/lib/constants"
@@ -50,6 +50,7 @@ export function RankingTab({ tickets, categoryStats }: RankingTabProps) {
   const top5 = useMemo(() => categoryStats.slice(0, 5), [categoryStats])
 
   const responsavelStats = useMemo(() => calculateResponsavelStats(tickets), [tickets])
+  const weeklyData = useMemo(() => getLast20WeeksComparison(tickets), [tickets])
 
   return (
     <div className="space-y-6">
@@ -131,6 +132,65 @@ export function RankingTab({ tickets, categoryStats }: RankingTabProps) {
           </Card>
         )}
       </div>
+
+      {/* Weekly trend — últimas 20 semanas + YoY */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base font-medium">Ranking por Semana</CardTitle>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-sm bg-blue-500" />
+                Ano atual
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-6 h-0.5 bg-orange-400 border-dashed" style={{ borderTop: "2px dashed #fb923c" }} />
+                Ano anterior
+              </span>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={weeklyData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                tickLine={false}
+                axisLine={false}
+                interval={1}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+                width={28}
+              />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
+                formatter={(value: number, name: string) => [
+                  value,
+                  name === "anoAtual" ? "Ano atual" : "Ano anterior"
+                ]}
+                labelFormatter={(label) => `Semana de ${label}`}
+              />
+              <Bar dataKey="anoAtual" name="anoAtual" fill="#3b82f6" radius={[3, 3, 0, 0]} barSize={14} />
+              <Line
+                dataKey="anoAnterior"
+                name="anoAnterior"
+                type="monotone"
+                stroke="#fb923c"
+                strokeWidth={2}
+                strokeDasharray="4 3"
+                dot={{ r: 3, fill: "#fb923c", strokeWidth: 0 }}
+                activeDot={{ r: 5 }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
       {/* Horizontal Bar Chart */}
       <Card>
