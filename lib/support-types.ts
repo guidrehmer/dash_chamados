@@ -12,6 +12,7 @@ export interface TicketRaw {
 
 /** Item retornado pelo endpoint /fila/ (sem responsável) */
 export interface FilaItem {
+  nr_chamado: string | number | null
   dataabertura: string
   descricao: string
   situacao: string

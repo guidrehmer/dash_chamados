@@ -7,9 +7,9 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from "recharts"
 import { KPICard } from "./kpi-card"
 import { StatusBadge } from "./status-badge"
-import type { Ticket, KPIData, HourlyData, DailyData } from "@/lib/support-types"
+import type { Ticket, KPIData, HourlyData, DailyData, FilaItem } from "@/lib/support-types"
 import { formatTime, getSLAColor } from "@/lib/support-utils"
-import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2, UserX, ShieldAlert, AlertCircle, Inbox } from "lucide-react"
+import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2, UserX, ShieldAlert, AlertCircle, Inbox, ChevronDown, ChevronUp } from "lucide-react"
 import { STATUS_COLORS, CHART_COLOR_PRIMARY, RECENT_TICKETS_LIMIT } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -69,8 +69,9 @@ interface OverviewTabProps {
   kpis: KPIData
   hourlyData: HourlyData[]
   dailyData: DailyData[]
-  filaCount?: number       // tickets sem responsável (ao vivo, endpoint /fila/)
-  aguardandoCount?: number // tickets em aberto/atendimento (ao vivo, endpoint /aguardando/)
+  filaCount?: number
+  filaItems?: FilaItem[]
+  aguardandoCount?: number
 }
 
 const chartConfig = {
@@ -96,7 +97,8 @@ const chartConfig = {
   }
 }
 
-export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 0, aguardandoCount = 0 }: OverviewTabProps) {
+export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 0, filaItems = [], aguardandoCount = 0 }: OverviewTabProps) {
+  const [filaExpanded, setFilaExpanded] = useState(false)
   const [hojeOpen, setHojeOpen] = useState(false)
   const [hojeLoading, setHojeLoading] = useState(false)
   const [hojeData, setHojeData] = useState<AtendimentoDia[]>([])
@@ -148,19 +150,52 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 
 
       {/* Alerta ao vivo: fila sem responsável */}
       {filaCount > 0 && (
-        <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <AlertCircle className="h-5 w-5 text-red-600 shrink-0 animate-pulse" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-red-800">
-              {filaCount} ticket{filaCount > 1 ? "s" : ""} na fila sem responsável atribuído
-            </p>
-            <p className="text-xs text-red-600 mt-0.5">
-              Atribua responsáveis para evitar violação de SLA
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <span className="text-xs text-red-600 font-medium">Ao vivo</span>
-          </div>
+        <div className="rounded-lg border border-red-200 bg-red-50 overflow-hidden">
+          {/* Cabeçalho clicável */}
+          <button
+            onClick={() => setFilaExpanded(v => !v)}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-100/60 transition-colors text-left"
+          >
+            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 animate-pulse" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-800">
+                {filaCount} ticket{filaCount > 1 ? "s" : ""} na fila sem responsável atribuído
+              </p>
+              <p className="text-xs text-red-600 mt-0.5">
+                {filaExpanded ? "Clique para recolher" : "Clique para ver os detalhes"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-red-600 font-medium">Ao vivo</span>
+              {filaExpanded
+                ? <ChevronUp className="h-4 w-4 text-red-500" />
+                : <ChevronDown className="h-4 w-4 text-red-500" />
+              }
+            </div>
+          </button>
+
+          {/* Widget expandido: cards lado a lado */}
+          {filaExpanded && (
+            <div className="border-t border-red-200 px-4 py-3 bg-white/60">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+                {filaItems.map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col gap-1 rounded-md border border-red-100 bg-white px-3 py-2.5 shadow-sm"
+                  >
+                    {item.nr_chamado != null && (
+                      <span className="text-xs font-mono font-bold text-red-600">
+                        #{item.nr_chamado}
+                      </span>
+                    )}
+                    <p className="text-xs text-slate-700 leading-relaxed line-clamp-3">
+                      {item.descricao || <em className="text-slate-400">Sem descrição</em>}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

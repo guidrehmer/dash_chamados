@@ -529,6 +529,7 @@ export default function DashboardPage() {
                   hourlyData={hourlyData}
                   dailyData={dailyData}
                   filaCount={filaCount}
+                  filaItems={filaData?.items ?? []}
                   aguardandoCount={aguardandoCount}
                 />
               )}
