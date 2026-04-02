@@ -9,9 +9,8 @@ import { KPICard } from "./kpi-card"
 import { StatusBadge } from "./status-badge"
 import type { Ticket, KPIData, HourlyData, DailyData, FilaItem } from "@/lib/support-types"
 import { formatTime, getSLAColor } from "@/lib/support-utils"
-import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2, UserX, ShieldAlert, AlertCircle, Inbox, ChevronDown, ChevronUp } from "lucide-react"
+import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, UserX, ShieldAlert, AlertCircle, Inbox, ChevronDown, ChevronUp } from "lucide-react"
 import { STATUS_COLORS, CHART_COLOR_PRIMARY, RECENT_TICKETS_LIMIT } from "@/lib/constants"
-import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -102,7 +101,6 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 
   const [hojeOpen, setHojeOpen] = useState(false)
   const [hojeLoading, setHojeLoading] = useState(false)
   const [hojeData, setHojeData] = useState<AtendimentoDia[]>([])
-  const [hojeMaximized, setHojeMaximized] = useState(false)
 
   const handleHojeClick = useCallback(async () => {
     setHojeOpen(true)
@@ -232,46 +230,119 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 
         </div>
 
         <Dialog open={hojeOpen} onOpenChange={setHojeOpen}>
-          <DialogContent className={hojeMaximized ? "w-screen max-w-screen h-screen max-h-screen rounded-none overflow-auto" : "overflow-auto"} style={hojeMaximized ? {} : { width: "90vw", maxWidth: "90vw", height: "80vh", maxHeight: "90vh", minWidth: "400px", minHeight: "300px", resize: "both" }}>
-            <DialogHeader className="flex flex-row items-center justify-between pr-8">
-              <DialogTitle>Abertos Hoje ({hojeData.length})</DialogTitle>
-              <Button variant="ghost" size="icon" onClick={() => setHojeMaximized(v => !v)} title={hojeMaximized ? "Restaurar" : "Maximizar"}>
-                {hojeMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </Button>
-            </DialogHeader>
-            {hojeLoading ? (
-              <div className="flex justify-center py-10 text-sm text-muted-foreground">Carregando...</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[130px]">Abertura</TableHead>
-                      <TableHead className="w-[130px]">Encerramento</TableHead>
-                      <TableHead className="w-[160px]">Título</TableHead>
-                      <TableHead className="w-[120px]">Responsável</TableHead>
-                      <TableHead className="w-[120px]">Usuário</TableHead>
-                      <TableHead className="w-[90px]">Grupo</TableHead>
-                      <TableHead className="w-[110px]">Status</TableHead>
-                      <TableHead>Descrição</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {hojeData.map((item, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="text-xs">{new Date(item.dataabertura).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}</TableCell>
-                        <TableCell className="text-xs">{item.dataencerrado ? new Date(item.dataencerrado).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "-"}</TableCell>
-                        <TableCell className="text-xs font-medium">{item.titulo}</TableCell>
-                        <TableCell className="text-xs">{item.responsavel || "-"}</TableCell>
-                        <TableCell className="text-xs">{item.usuario}</TableCell>
-                        <TableCell className="text-xs">{item.grupo}</TableCell>
-                        <TableCell><StatusBadge status={item.situacao as any} /></TableCell>
-                        <TableCell className="text-xs"><ExpandableText text={item.descricao} limit={40} /></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+          <DialogContent
+            className="flex flex-col p-0 gap-0"
+            style={{ width: "92vw", maxWidth: "920px", height: "85vh", maxHeight: "85vh" }}
+          >
+            {/* ── Cabeçalho ── */}
+            <div className="flex items-center justify-between px-5 py-4 border-b bg-white shrink-0">
+              <div>
+                <DialogTitle className="text-base font-semibold text-slate-800">
+                  Abertos Hoje
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+                </p>
               </div>
+            </div>
+
+            {hojeLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <div className="h-7 w-7 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+                <p className="text-sm">Carregando atendimentos...</p>
+              </div>
+            ) : (
+              <>
+                {/* ── Mini-stats ── */}
+                <div className="grid grid-cols-4 divide-x border-b bg-slate-50/70 shrink-0">
+                  {[
+                    { label: "Total", value: hojeData.length, color: "text-slate-800" },
+                    { label: "Encerrados",     value: hojeData.filter(d => d.situacao === "Encerrado").length,       color: "text-emerald-600" },
+                    { label: "Em Atendimento", value: hojeData.filter(d => d.situacao === "Em Atendimento").length,  color: "text-blue-600" },
+                    { label: "Pendentes",      value: hojeData.filter(d => d.situacao !== "Encerrado" && d.situacao !== "Em Atendimento").length, color: "text-amber-600" },
+                  ].map(s => (
+                    <div key={s.label} className="flex flex-col items-center py-2.5 px-3">
+                      <span className={`text-xl font-bold ${s.color}`}>{s.value}</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Lista de cards ── */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+                  {hojeData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+                      <Activity className="h-8 w-8 text-slate-300" />
+                      <p className="text-sm">Nenhum atendimento aberto hoje.</p>
+                    </div>
+                  ) : hojeData.map((item, i) => {
+                    const statusColor = STATUS_COLORS[item.situacao as keyof typeof STATUS_COLORS] ?? "#6b7280"
+                    const abertura = new Date(item.dataabertura)
+                    const horaAbertura = abertura.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+                    const durMin = item.dataencerrado
+                      ? Math.round((new Date(item.dataencerrado).getTime() - abertura.getTime()) / 60000)
+                      : null
+                    return (
+                      <div
+                        key={i}
+                        className="flex gap-3 rounded-lg border border-slate-100 bg-white px-4 py-3 shadow-sm hover:shadow-md transition-shadow"
+                        style={{ borderLeftWidth: 3, borderLeftColor: statusColor }}
+                      >
+                        {/* Conteúdo principal */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate leading-snug">
+                            {item.titulo || item.descricao || "Sem título"}
+                          </p>
+                          {item.titulo && item.descricao && (
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
+                              {item.descricao}
+                            </p>
+                          )}
+                          {/* Tags */}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                              {item.grupo}
+                            </span>
+                            {item.responsavel ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700">
+                                {item.responsavel}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-500 italic">
+                                Sem responsável
+                              </span>
+                            )}
+                            {item.usuario && (
+                              <span className="text-[10px] text-slate-400">via {item.usuario}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Lado direito: hora + status + duração */}
+                        <div className="flex flex-col items-end justify-between shrink-0 gap-1">
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                            style={{ backgroundColor: statusColor + "18", color: statusColor }}
+                          >
+                            {item.situacao}
+                          </span>
+                          <div className="text-right">
+                            <p className="text-xs font-medium text-slate-600">{horaAbertura}</p>
+                            {durMin !== null && (
+                              <p className="text-[10px] text-muted-foreground">
+                                {durMin < 60
+                                  ? `${durMin}min`
+                                  : `${Math.floor(durMin / 60)}h${durMin % 60 > 0 ? ` ${durMin % 60}min` : ""}`
+                                }
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
             )}
           </DialogContent>
         </Dialog>
