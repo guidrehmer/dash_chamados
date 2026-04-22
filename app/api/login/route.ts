@@ -1,16 +1,31 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
-export async function POST(req: NextRequest) {
-  const { usuario, senha } = await req.json()
+const LOGIN_URL = "https://sistema.romancemoda.com.br/apex/romance/aisten/login"
 
-  const res = await fetch("https://sistema.romancemoda.com.br/apex/romance/company/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ usuario, senha }).toString(),
-  })
+export async function POST(request: Request) {
+  const { usuario, senha } = await request.json()
 
-  const message = res.headers.get("message") ?? ""
-  const sucesso = message.toLowerCase() === "sucesso"
+  try {
+    const response = await fetch(LOGIN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ usuario, senha }),
+    })
 
-  return NextResponse.json({ sucesso, message }, { status: 200 })
+    // O APEX retorna body vazio em caso de sucesso — checar header "message"
+    const messageHeader = response.headers.get("message")
+    if (response.ok && messageHeader === "sucesso") {
+      return NextResponse.json({ ok: true, usuario })
+    }
+
+    const text = await response.text()
+    if (text) {
+      const data = JSON.parse(text)
+      return NextResponse.json({ ok: false, mensagem: data.mensagem || "Usuário ou senha incorretos." })
+    }
+
+    return NextResponse.json({ ok: false, mensagem: "Usuário ou senha incorretos." })
+  } catch {
+    return NextResponse.json({ ok: false, mensagem: "Erro ao conectar com o servidor." })
+  }
 }

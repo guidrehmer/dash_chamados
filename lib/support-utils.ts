@@ -1,7 +1,20 @@
-import type { Ticket, TicketRaw, CategoryStats, ResponsavelStats, HourlyData, DailyData, TimeDistribution, KPIData, PeriodFilter, GroupFilter, Categoria } from "./support-types"
-
-// SLA target in minutes
-const SLA_TARGET = 120
+import type {
+  Ticket, TicketRaw, CategoryStats, ResponsavelStats, HourlyData, DailyData,
+  TimeDistribution, KPIData, PeriodFilter, GroupFilter, Categoria,
+  PrioridadeStats, BacklogIdadeFaixas
+} from "./support-types"
+import {
+  SLA_TARGET_MINUTES as SLA_TARGET,
+  KEYWORD_MIN_COUNT,
+  TMA_GREEN_MAX,
+  TMA_YELLOW_MAX,
+  SLA_RATE_TARGET,
+  SLA_RATE_WARNING,
+  MTTA_TARGET_MINUTES,
+  MTTA_WARNING_MINUTES,
+  PRIORIDADE_POR_CATEGORIA,
+  SLA_POR_PRIORIDADE,
+} from "./constants"
 
 // Stop words to remove from word cloud
 const STOP_WORDS = new Set([
@@ -48,7 +61,133 @@ export function categorizeTicket(descricao: string): Categoria {
   if (desc.includes("semana") || desc.includes("campanha") || desc.includes("week")) {
     return "Semanas / Campanha"
   }
+
+  // ── Categorias adicionais para reduzir "Outros" ───────────────────────────
+  if (
+    desc.includes("erro") || desc.includes("falha") || desc.includes("bug") ||
+    desc.includes("travad") || desc.includes("travar") || desc.includes("trava ") ||
+    desc.includes("lento") || desc.includes("lentidão") || desc.includes("lentidao") ||
+    desc.includes("não funciona") || desc.includes("nao funciona") ||
+    desc.includes("crash") || desc.includes("parou") || desc.includes("caiu")
+  ) {
+    return "Erro / Falha do Sistema"
+  }
+  if (
+    desc.includes("relat") || desc.includes("consulta") || desc.includes("extrato") ||
+    desc.includes("histórico") || desc.includes("historico") || desc.includes("exportar") ||
+    desc.includes("exportação") || desc.includes("exportacao") || desc.includes("visualizar") ||
+    (desc.includes("gerar") && !desc.includes("gerando"))
+  ) {
+    return "Relatório / Consulta"
+  }
+  if (
+    desc.includes("fatur") || desc.includes("financeiro") || desc.includes("boleto") ||
+    desc.includes("nfe") || desc.includes("nota fiscal") || desc.includes("xml") ||
+    desc.includes("fiscal") || desc.includes("pagamento") || desc.includes("cobrança") ||
+    desc.includes("cobranca") || desc.includes("duplicata")
+  ) {
+    return "Financeiro / Faturamento"
+  }
+  if (
+    desc.includes("impressora") || desc.includes("imprimir") || desc.includes("impressão") ||
+    desc.includes("impressao") || desc.includes("hardware") || desc.includes("equipamento") ||
+    desc.includes("computador") || desc.includes("scanner") || desc.includes("leitor")
+  ) {
+    return "Impressão / Hardware"
+  }
+  if (
+    desc.includes("configur") || desc.includes("parametr") || desc.includes("instalar") ||
+    desc.includes("instalação") || desc.includes("instalacao") || desc.includes("setup") ||
+    desc.includes("atualizar") || desc.includes("atualização") || desc.includes("atualizacao") ||
+    desc.includes("versão") || desc.includes("versao")
+  ) {
+    return "Configuração / Parametrização"
+  }
+  if (
+    desc.includes("dúvida") || desc.includes("duvida") || desc.includes("treinamento") ||
+    desc.includes("como fazer") || desc.includes("como usar") || desc.includes("como uso") ||
+    desc.includes("tutorial") || desc.includes("ajuda") || desc.includes("orientação") ||
+    desc.includes("orientacao") || desc.includes("instrução") || desc.includes("instrucao")
+  ) {
+    return "Dúvida / Treinamento"
+  }
+
   return "Outros"
+}
+
+// ─── Prioridade inferida por categoria ───────────────────────────────────────
+export function getPrioridadeInferida(categoria: string): "Critico" | "Alto" | "Medio" | "Baixo" {
+  return PRIORIDADE_POR_CATEGORIA[categoria] ?? "Medio"
+}
+
+export function getSLATargetByPrioridade(categoria: string): number {
+  const prioridade = getPrioridadeInferida(categoria)
+  return SLA_POR_PRIORIDADE[prioridade]
+}
+
+// ─── MTTA — Mean Time To Acknowledge ─────────────────────────────────────────
+/**
+ * Calcula MTTA em minutos usando menor_historico.
+ * Retorna null quando:
+ *   - menor_historico está ausente (sem interação ainda)
+ *   - diff < 0 (dado corrompido — historico anterior à abertura)
+ *   - diff > 30 dias (dado inválido)
+ */
+export function calculateMTTA(dataabertura: string, menorHistorico?: string | null): number | null {
+  if (!menorHistorico) return null
+
+  const abertura = new Date(dataabertura).getTime()
+  const primeiraInteracao = new Date(menorHistorico).getTime()
+  const diffMinutes = (primeiraInteracao - abertura) / (1000 * 60)
+
+  if (diffMinutes < 0) return null                    // edge case: dado corrompido
+  if (diffMinutes > 30 * 24 * 60) return null         // edge case: outlier > 30 dias
+
+  return Math.round(diffMinutes)
+}
+
+// ─── Backlog por idade ────────────────────────────────────────────────────────
+export function calcularBacklogPorIdade(tickets: Ticket[]): BacklogIdadeFaixas {
+  const agora = Date.now()
+  const result: BacklogIdadeFaixas = { menosDe4h: 0, de4hA24h: 0, de1A3dias: 0, maisDe3dias: 0 }
+
+  tickets
+    .filter(t => t.situacao !== "Encerrado")
+    .forEach(t => {
+      const idadeHoras = (agora - t.dataAberturaLocal.getTime()) / (1000 * 60 * 60)
+      if      (idadeHoras < 4)  result.menosDe4h++
+      else if (idadeHoras < 24) result.de4hA24h++
+      else if (idadeHoras < 72) result.de1A3dias++
+      else                      result.maisDe3dias++
+    })
+
+  return result
+}
+
+// ─── SLA por prioridade ───────────────────────────────────────────────────────
+export function calculateSLAByPrioridade(tickets: Ticket[]): PrioridadeStats[] {
+  const prioridades = ["Critico", "Alto", "Medio", "Baixo"] as const
+  const map: Record<string, Ticket[]> = { Critico: [], Alto: [], Medio: [], Baixo: [] }
+
+  tickets.forEach(t => map[t.prioridadeInferida].push(t))
+
+  return prioridades.map(p => {
+    const ts = map[p]
+    const withTime = ts.filter(t => t.tempoResolucao !== null)
+    const dentroPrazo = withTime.filter(t => t.dentroSLAPrioridade === true).length
+    const slaTarget = SLA_POR_PRIORIDADE[p]
+    const times = withTime.map(t => t.tempoResolucao as number)
+    const tma = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0
+
+    return {
+      prioridade: p,
+      total: ts.length,
+      dentroPrazo,
+      taxaSLA: withTime.length > 0 ? Math.round((dentroPrazo / withTime.length) * 100) : 0,
+      tma,
+      slaTarget,
+    }
+  })
 }
 
 // Parse date string — keep Z so JS converts UTC → local timezone automatically
@@ -63,22 +202,36 @@ export function calculateResolutionTime(abertura: string, encerrado: string | nu
   const start = new Date(abertura).getTime()
   const end = new Date(encerrado).getTime()
   const diffMinutes = (end - start) / (1000 * 60)
-  
-  // Filter out invalid data (negative or > 24h)
-  if (diffMinutes < 0 || diffMinutes > 24 * 60) return null
-  
+
+  // Filter out only clearly invalid data (negative or absurdly long > 30 days)
+  if (diffMinutes < 0 || diffMinutes > 30 * 24 * 60) return null
+
   return Math.round(diffMinutes)
 }
 
 // Process raw tickets into enriched tickets
 export function processTickets(rawTickets: TicketRaw[]): Ticket[] {
-  return rawTickets.map(ticket => ({
-    ...ticket,
-    categoria: categorizeTicket(ticket.descricao),
-    tempoResolucao: calculateResolutionTime(ticket.dataabertura, ticket.dataencerrado),
-    dataAberturaLocal: toBrazilTime(ticket.dataabertura),
-    dataEncerradoLocal: ticket.dataencerrado ? toBrazilTime(ticket.dataencerrado) : null
-  }))
+  return rawTickets.map(ticket => {
+    const categoria = categorizeTicket(ticket.descricao)
+    const tempoResolucao = calculateResolutionTime(ticket.dataabertura, ticket.dataencerrado)
+    const mtta = calculateMTTA(ticket.dataabertura, ticket.menor_historico)
+    const prioridadeInferida = getPrioridadeInferida(categoria)
+    const slaTargetMinutes = getSLATargetByPrioridade(categoria)
+    const dentroSLAPrioridade =
+      tempoResolucao !== null ? tempoResolucao <= slaTargetMinutes : null
+
+    return {
+      ...ticket,
+      categoria,
+      tempoResolucao,
+      mtta,
+      prioridadeInferida,
+      slaTargetMinutes,
+      dentroSLAPrioridade,
+      dataAberturaLocal: toBrazilTime(ticket.dataabertura),
+      dataEncerradoLocal: ticket.dataencerrado ? toBrazilTime(ticket.dataencerrado) : null,
+    }
+  })
 }
 
 // Filter tickets by period
@@ -134,7 +287,8 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
 
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-  const hoje = tickets.filter(t => t.dataEncerradoLocal !== null && t.dataEncerradoLocal >= startOfDay).length
+  // Use dataAberturaLocal consistently for all period counts
+  const hoje = tickets.filter(t => t.dataAberturaLocal >= startOfDay).length
   const semana = tickets.filter(t => t.dataAberturaLocal >= startOfWeek).length
   const mes = tickets.filter(t => t.dataAberturaLocal >= startOfMonth).length
   
@@ -151,10 +305,29 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
     ? Math.round((times.filter(t => t <= SLA_TARGET).length / times.length) * 100)
     : 0
   const violacoesSLA = times.filter(t => t > SLA_TARGET).length
-  
+
+  // Critical tickets: resolution time > 24h
+  const criticalTickets = times.filter(t => t > 24 * 60).length
+
+  // Tickets without a responsável
+  const semResponsavel = tickets.filter(t => !t.responsavel).length
+
   // Resolution rate
   const encerrados = tickets.filter(t => t.situacao === "Encerrado").length
   const taxaResolucao = tickets.length > 0 ? Math.round((encerrados / tickets.length) * 100) : 0
+
+  // ── ITIL KPIs adicionais ──────────────────────────────────────────────────
+  // Backlog: tickets ainda não encerrados
+  const backlog = tickets.filter(t => t.situacao !== "Encerrado").length
+  const taxaBacklog = tickets.length > 0 ? Math.round((backlog / tickets.length) * 100) : 0
+
+  // Taxa de escalação: proxy via "Aguardando Aprovação"
+  const aguardando = tickets.filter(t => t.situacao === "Aguardando Aprovação").length
+  const taxaEscalacao = tickets.length > 0 ? Math.round((aguardando / tickets.length) * 100) : 0
+
+  // Média diária de tickets (usando dias distintos no conjunto)
+  const uniqueDays = new Set(tickets.map(t => t.dataAberturaLocal.toDateString())).size
+  const mediaDiariaTickets = uniqueDays > 0 ? Math.round(tickets.length / uniqueDays) : 0
   
   // Most common category
   const categoryCount: Record<string, number> = {}
@@ -175,6 +348,18 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
   const topHour = Object.entries(hourCount).sort((a, b) => b[1] - a[1])[0]
   const horaPico = topHour ? parseInt(topHour[0]) : 0
   
+  // ── MTTA médio ───────────────────────────────────────────────────────────
+  const mttaTimes = tickets
+    .map(t => t.mtta)
+    .filter((v): v is number => v !== null)
+  const mtta = mttaTimes.length > 0
+    ? Math.round(mttaTimes.reduce((a, b) => a + b, 0) / mttaTimes.length)
+    : 0
+
+  // ── SLA por prioridade e backlog por idade ────────────────────────────────
+  const taxaSLAPrioridade = calculateSLAByPrioridade(tickets)
+  const backlogPorIdade   = calcularBacklogPorIdade(tickets)
+
   return {
     total: tickets.length,
     hoje,
@@ -187,7 +372,16 @@ export function calculateKPIs(tickets: Ticket[]): KPIData {
     taxaResolucao,
     categoriaMaisRecorrente,
     horaPico,
-    violacoesSLA
+    violacoesSLA,
+    criticalTickets,
+    semResponsavel,
+    backlog,
+    taxaBacklog,
+    taxaEscalacao,
+    mediaDiariaTickets,
+    mtta,
+    taxaSLAPrioridade,
+    backlogPorIdade,
   }
 }
 
@@ -287,7 +481,7 @@ export function getDailyData(tickets: Ticket[], days: number = 30): DailyData[] 
     nextDate.setDate(nextDate.getDate() + 1)
     
     const dayTickets = tickets.filter(t =>
-      t.dataEncerradoLocal !== null && t.dataEncerradoLocal >= date && t.dataEncerradoLocal < nextDate
+      t.dataAberturaLocal >= date && t.dataAberturaLocal < nextDate
     )
     
     const ticketsWithTime = dayTickets.filter(t => t.tempoResolucao !== null)
@@ -314,7 +508,9 @@ export function getTimeDistribution(tickets: Ticket[]): TimeDistribution[] {
     { label: "30-60min", min: 30, max: 60, dentroSLA: true },
     { label: "1-2h", min: 60, max: 120, dentroSLA: true },
     { label: "2-4h", min: 120, max: 240, dentroSLA: false },
-    { label: ">4h", min: 240, max: Infinity, dentroSLA: false }
+    { label: "4-8h", min: 240, max: 480, dentroSLA: false },
+    { label: "8-24h", min: 480, max: 1440, dentroSLA: false },
+    { label: ">24h", min: 1440, max: Infinity, dentroSLA: false }
   ]
   
   const ticketsWithTime = tickets.filter(t => t.tempoResolucao !== null)
@@ -341,9 +537,14 @@ export function formatTime(minutes: number): string {
   if (minutes < 60) {
     return `${Math.round(minutes)}min`
   }
-  const hours = Math.floor(minutes / 60)
-  const mins = Math.round(minutes % 60)
-  return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`
+  if (minutes < 24 * 60) {
+    const hours = Math.floor(minutes / 60)
+    const mins = Math.round(minutes % 60)
+    return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`
+  }
+  const days = Math.floor(minutes / (24 * 60))
+  const hours = Math.floor((minutes % (24 * 60)) / 60)
+  return hours > 0 ? `${days}d ${hours}h` : `${days}d`
 }
 
 // Extract keywords for word cloud
@@ -364,7 +565,7 @@ export function extractKeywords(tickets: Ticket[]): { word: string; count: numbe
   
   return Object.entries(wordCount)
     .map(([word, count]) => ({ word, count }))
-    .filter(w => w.count >= 3)
+    .filter(w => w.count >= KEYWORD_MIN_COUNT)
     .sort((a, b) => b.count - a.count)
     .slice(0, 50)
 }
@@ -409,23 +610,151 @@ export function getWeekComparison(tickets: Ticket[]): { current: number; previou
   return { current, previous, delta, percentChange }
 }
 
+export interface WeekComparisonPoint {
+  label: string        // "DD/MM"
+  anoAtual: number
+  anoAnterior: number
+}
+
+/** Retorna os dados das últimas 20 semanas (seg–dom) com comparativo YoY */
+export function getLast20WeeksComparison(tickets: Ticket[]): WeekComparisonPoint[] {
+  const now = new Date()
+
+  // Início da semana atual (segunda-feira)
+  const dayOfWeek = now.getDay()
+  const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  const startOfCurrentWeek = new Date(now)
+  startOfCurrentWeek.setDate(now.getDate() - diff)
+  startOfCurrentWeek.setHours(0, 0, 0, 0)
+
+  const result: WeekComparisonPoint[] = []
+
+  for (let i = 19; i >= 0; i--) {
+    const weekStart = new Date(startOfCurrentWeek)
+    weekStart.setDate(weekStart.getDate() - i * 7)
+
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekEnd.getDate() + 7)
+
+    const prevYearStart = new Date(weekStart)
+    prevYearStart.setFullYear(prevYearStart.getFullYear() - 1)
+    const prevYearEnd = new Date(weekEnd)
+    prevYearEnd.setFullYear(prevYearEnd.getFullYear() - 1)
+
+    const anoAtual = tickets.filter(
+      t => t.dataAberturaLocal >= weekStart && t.dataAberturaLocal < weekEnd
+    ).length
+
+    const anoAnterior = tickets.filter(
+      t => t.dataAberturaLocal >= prevYearStart && t.dataAberturaLocal < prevYearEnd
+    ).length
+
+    const label = `${weekStart.getDate().toString().padStart(2, "0")}/${(weekStart.getMonth() + 1).toString().padStart(2, "0")}`
+
+    result.push({ label, anoAtual, anoAnterior })
+  }
+
+  return result
+}
+
 // Truncate text
 export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text
   return text.substring(0, maxLength) + "..."
 }
 
-// Get SLA status color
+// Get SLA status color — thresholds driven by lib/constants.ts
 export function getSLAColor(value: number, type: "tma" | "taxa"): "green" | "yellow" | "red" {
   if (type === "tma") {
-    if (value <= 60) return "green"
-    if (value <= 120) return "yellow"
+    if (value <= TMA_GREEN_MAX)  return "green"
+    if (value <= TMA_YELLOW_MAX) return "yellow"
     return "red"
   }
-  // taxa
-  if (value >= 85) return "green"
-  if (value >= 60) return "yellow"
+  // taxa de SLA
+  if (value >= SLA_RATE_TARGET)  return "green"
+  if (value >= SLA_RATE_WARNING) return "yellow"
   return "red"
+}
+
+// Get backlog status color
+export function getBacklogColor(backlog: number): "green" | "yellow" | "red" {
+  if (backlog <= 30) return "green"
+  if (backlog <= 60) return "yellow"
+  return "red"
+}
+
+// Get MTTA status color
+export function getMTTAColor(mtta: number): "green" | "yellow" | "red" {
+  if (mtta <= MTTA_TARGET_MINUTES)  return "green"
+  if (mtta <= MTTA_WARNING_MINUTES) return "yellow"
+  return "red"
+}
+
+// Filter tickets by responsável name ("TODOS" returns all)
+export function filterByResponsavel(tickets: Ticket[], responsavel: string): Ticket[] {
+  if (responsavel === "TODOS") return tickets
+  if (responsavel === "Não atribuído") return tickets.filter(t => !t.responsavel)
+  return tickets.filter(t => t.responsavel === responsavel)
+}
+
+// Filter tickets by a custom date range (uses dataAberturaLocal)
+export function filterByDateRange(tickets: Ticket[], from: Date, to: Date): Ticket[] {
+  const endOfTo = new Date(to)
+  endOfTo.setHours(23, 59, 59, 999)
+  return tickets.filter(t => t.dataAberturaLocal >= from && t.dataAberturaLocal <= endOfTo)
+}
+
+// Get sorted unique responsável names from all tickets
+export function getResponsaveis(tickets: Ticket[]): string[] {
+  const set = new Set<string>()
+  tickets.forEach(t => {
+    if (t.responsavel) set.add(t.responsavel)
+    else set.add("Não atribuído")
+  })
+  return Array.from(set).sort((a, b) => {
+    if (a === "Não atribuído") return 1
+    if (b === "Não atribuído") return -1
+    return a.localeCompare(b, "pt-BR")
+  })
+}
+
+// Export filtered tickets to a UTF-8 CSV file and trigger download
+export function exportToCSV(tickets: Ticket[], filename: string = "atendimentos.csv"): void {
+  const headers = [
+    "Data Abertura",
+    "Data Encerramento",
+    "Categoria",
+    "Grupo",
+    "Responsável",
+    "Situação",
+    "Tempo (min)",
+    "Descrição"
+  ]
+
+  const escape = (val: string) => `"${val.replace(/"/g, '""')}"`
+
+  const rows = tickets.map(t => [
+    escape(t.dataAberturaLocal.toLocaleString("pt-BR")),
+    escape(t.dataEncerradoLocal ? t.dataEncerradoLocal.toLocaleString("pt-BR") : ""),
+    escape(t.categoria),
+    escape(t.grupo),
+    escape(t.responsavel || "Não atribuído"),
+    escape(t.situacao),
+    t.tempoResolucao !== null ? t.tempoResolucao.toString() : "",
+    escape(t.descricao)
+  ])
+
+  const csvContent = [headers.join(";"), ...rows.map(r => r.join(";"))].join("\n")
+  const BOM = "\uFEFF"
+  const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 // Build AI context from data
@@ -460,17 +789,29 @@ export function buildAIContext(tickets: Ticket[], kpis: KPIData, categoryStats: 
     descricao: truncateText(t.descricao, 100)
   }))
   
-  return `Você é um especialista em análise de suporte de TI e sistemas. 
-Analise os dados abaixo e responda em português brasileiro de forma objetiva, 
+  return `Você é um especialista em análise de suporte de TI e sistemas (ITIL).
+Analise os dados abaixo e responda em português brasileiro de forma objetiva,
 direta e acionável, com bullet points e destaques em negrito quando relevante.
 
 RESUMO DOS DADOS DO SUPORTE — CrisduLabs
 - Total de atendimentos: ${kpis.total}
 - Período dos dados: ${dataRange}
 - Atendimentos hoje: ${kpis.hoje} | esta semana: ${kpis.semana} | este mês: ${kpis.mes}
-- Tempo Médio de Atendimento (TMA): ${kpis.tma} minutos
-- Taxa de cumprimento SLA (meta 2h): ${kpis.taxaSLA}%
-- Total violações de SLA: ${kpis.violacoesSLA}
+- Média diária de tickets: ${kpis.mediaDiariaTickets}
+── KPIs ITIL ──
+- MTTR / TMA (Tempo Médio de Resolução): ${kpis.tma} min (meta: 120 min)
+- MTTA (Tempo Médio até 1ª interação): ${kpis.mtta} min (meta: 30 min)
+- Taxa SLA (% resolvidos no prazo): ${kpis.taxaSLA}% (meta: 85%)
+- SLA por prioridade: ${JSON.stringify(kpis.taxaSLAPrioridade.map(p => ({ p: p.prioridade, taxa: p.taxaSLA, total: p.total })))}
+- Violações de SLA: ${kpis.violacoesSLA}
+- Backlog atual (tickets em aberto): ${kpis.backlog} (${kpis.taxaBacklog}% do total)
+- Backlog por idade: <4h=${kpis.backlogPorIdade.menosDe4h} | 4h-24h=${kpis.backlogPorIdade.de4hA24h} | 1-3d=${kpis.backlogPorIdade.de1A3dias} | >3d=${kpis.backlogPorIdade.maisDe3dias}
+- Taxa de Escalação (Aguardando Aprovação): ${kpis.taxaEscalacao}%
+- Tickets críticos (>24h): ${kpis.criticalTickets}
+- Quick Wins (<15min): ${kpis.quickWins}%
+- Taxa de resolução geral: ${kpis.taxaResolucao}%
+- Tickets sem responsável: ${kpis.semResponsavel}
+── Distribuição ──
 - Categoria mais frequente: ${kpis.categoriaMaisRecorrente.nome} (${kpis.categoriaMaisRecorrente.percentual}%)
 - Distribuição por categoria: ${categoriesJson}
 - Distribuição por hora do dia: ${hoursJson}

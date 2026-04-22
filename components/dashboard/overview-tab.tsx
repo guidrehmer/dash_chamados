@@ -7,10 +7,10 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from "recharts"
 import { KPICard } from "./kpi-card"
 import { StatusBadge } from "./status-badge"
-import type { Ticket, KPIData, HourlyData, DailyData } from "@/lib/support-types"
+import type { Ticket, KPIData, HourlyData, DailyData, FilaItem } from "@/lib/support-types"
 import { formatTime, getSLAColor } from "@/lib/support-utils"
-import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, Maximize2, Minimize2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, UserX, ShieldAlert, AlertCircle, Inbox, ChevronDown, ChevronUp } from "lucide-react"
+import { STATUS_COLORS, CHART_COLOR_PRIMARY, RECENT_TICKETS_LIMIT } from "@/lib/constants"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -26,7 +26,7 @@ interface AtendimentoDia {
 }
 
 async function fetchAtendimentosHoje(): Promise<AtendimentoDia[]> {
-  const BASE = "https://sistema.romancemoda.com.br/apex/romance/company/atendimentos/"
+  const BASE = "https://sistema.romancemoda.com.br/apex/romance/aisten/atendimentos/"
   const all: AtendimentoDia[] = []
   let offset = 0
   let hasMore = true
@@ -39,8 +39,9 @@ async function fetchAtendimentosHoje(): Promise<AtendimentoDia[]> {
     offset += 25
     if (offset > 10000) break
   }
+  // Filter by opening date (consistent with KPI "Abertos Hoje")
   const hoje = new Date().toLocaleDateString("en-CA") // YYYY-MM-DD local date
-  return all.filter(item => item.dataencerrado && item.dataencerrado.slice(0, 10) === hoje)
+  return all.filter(item => item.dataabertura && item.dataabertura.slice(0, 10) === hoje)
 }
 
 function ExpandableText({ text, limit = 50 }: { text: string; limit?: number }) {
@@ -67,19 +68,15 @@ interface OverviewTabProps {
   kpis: KPIData
   hourlyData: HourlyData[]
   dailyData: DailyData[]
-}
-
-const STATUS_COLORS = {
-  "Encerrado": "#10b981",
-  "Em Atendimento": "#3b82f6",
-  "Aguardando Aprovação": "#f59e0b",
-  "Aberto": "#6b7280"
+  filaCount?: number
+  filaItems?: FilaItem[]
+  aguardandoCount?: number
 }
 
 const chartConfig = {
   quantidade: {
     label: "Quantidade",
-    color: "#1a56db"
+    color: CHART_COLOR_PRIMARY
   },
   encerrado: {
     label: "Encerrado",
@@ -99,11 +96,11 @@ const chartConfig = {
   }
 }
 
-export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTabProps) {
+export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 0, filaItems = [], aguardandoCount = 0 }: OverviewTabProps) {
+  const [filaExpanded, setFilaExpanded] = useState(false)
   const [hojeOpen, setHojeOpen] = useState(false)
   const [hojeLoading, setHojeLoading] = useState(false)
   const [hojeData, setHojeData] = useState<AtendimentoDia[]>([])
-  const [hojeMaximized, setHojeMaximized] = useState(false)
 
   const handleHojeClick = useCallback(async () => {
     setHojeOpen(true)
@@ -136,7 +133,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
     return [...tickets]
       .filter(t => t.dataEncerradoLocal !== null)
       .sort((a, b) => b.dataEncerradoLocal!.getTime() - a.dataEncerradoLocal!.getTime())
-      .slice(0, 20)
+      .slice(0, RECENT_TICKETS_LIMIT)
   }, [tickets])
 
   const hourlyChartData = useMemo(() => {
@@ -148,6 +145,73 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
 
   return (
     <div className="space-y-6">
+
+      {/* Alerta ao vivo: fila sem responsável */}
+      {filaCount > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 overflow-hidden">
+          {/* Cabeçalho clicável */}
+          <button
+            onClick={() => setFilaExpanded(v => !v)}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-100/60 transition-colors text-left"
+          >
+            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 animate-pulse" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-800">
+                {filaCount} ticket{filaCount > 1 ? "s" : ""} na fila sem responsável atribuído
+              </p>
+              <p className="text-xs text-red-600 mt-0.5">
+                {filaExpanded ? "Clique para recolher" : "Clique para ver os detalhes"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-red-600 font-medium">Ao vivo</span>
+              {filaExpanded
+                ? <ChevronUp className="h-4 w-4 text-red-500" />
+                : <ChevronDown className="h-4 w-4 text-red-500" />
+              }
+            </div>
+          </button>
+
+          {/* Widget expandido: cards lado a lado */}
+          {filaExpanded && (
+            <div className="border-t border-red-200 px-4 py-3 bg-white/60">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+                {filaItems.map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col gap-1 rounded-md border border-red-100 bg-white px-3 py-2.5 shadow-sm"
+                  >
+                    {item.nr_chamado != null && (
+                      <span className="text-xs font-mono font-bold text-red-600">
+                        #{item.nr_chamado}
+                      </span>
+                    )}
+                    <p className="text-xs text-slate-700 leading-relaxed line-clamp-3">
+                      {item.descricao || <em className="text-slate-400">Sem descrição</em>}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Situação atual (backlog ao vivo) */}
+      {aguardandoCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <Inbox className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">
+              {aguardandoCount} ticket{aguardandoCount > 1 ? "s" : ""} em aberto / em atendimento agora
+            </p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              Backlog atual — dados atualizados a cada minuto
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
@@ -158,7 +222,7 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
         />
         <div onClick={handleHojeClick} className="cursor-pointer">
           <KPICard
-            title="Atendimentos Hoje"
+            title="Abertos Hoje"
             value={kpis.hoje}
             icon={<Activity className="h-4 w-4" />}
             status="neutral"
@@ -166,46 +230,119 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
         </div>
 
         <Dialog open={hojeOpen} onOpenChange={setHojeOpen}>
-          <DialogContent className={hojeMaximized ? "w-screen max-w-screen h-screen max-h-screen rounded-none overflow-auto" : "overflow-auto"} style={hojeMaximized ? {} : { width: "90vw", maxWidth: "90vw", height: "80vh", maxHeight: "90vh", minWidth: "400px", minHeight: "300px", resize: "both" }}>
-            <DialogHeader className="flex flex-row items-center justify-between pr-8">
-              <DialogTitle>Atendimentos Hoje ({hojeData.length})</DialogTitle>
-              <Button variant="ghost" size="icon" onClick={() => setHojeMaximized(v => !v)} title={hojeMaximized ? "Restaurar" : "Maximizar"}>
-                {hojeMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </Button>
-            </DialogHeader>
-            {hojeLoading ? (
-              <div className="flex justify-center py-10 text-sm text-muted-foreground">Carregando...</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[130px]">Abertura</TableHead>
-                      <TableHead className="w-[130px]">Encerramento</TableHead>
-                      <TableHead className="w-[160px]">Título</TableHead>
-                      <TableHead className="w-[120px]">Responsável</TableHead>
-                      <TableHead className="w-[120px]">Usuário</TableHead>
-                      <TableHead className="w-[90px]">Grupo</TableHead>
-                      <TableHead className="w-[110px]">Status</TableHead>
-                      <TableHead>Descrição</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {hojeData.map((item, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="text-xs">{new Date(item.dataabertura).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}</TableCell>
-                        <TableCell className="text-xs">{item.dataencerrado ? new Date(item.dataencerrado).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "-"}</TableCell>
-                        <TableCell className="text-xs font-medium">{item.titulo}</TableCell>
-                        <TableCell className="text-xs">{item.responsavel || "-"}</TableCell>
-                        <TableCell className="text-xs">{item.usuario}</TableCell>
-                        <TableCell className="text-xs">{item.grupo}</TableCell>
-                        <TableCell><StatusBadge status={item.situacao as any} /></TableCell>
-                        <TableCell className="text-xs"><ExpandableText text={item.descricao} limit={40} /></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+          <DialogContent
+            className="flex flex-col p-0 gap-0"
+            style={{ width: "92vw", maxWidth: "920px", height: "85vh", maxHeight: "85vh" }}
+          >
+            {/* ── Cabeçalho ── */}
+            <div className="flex items-center justify-between px-5 py-4 border-b bg-white shrink-0">
+              <div>
+                <DialogTitle className="text-base font-semibold text-slate-800">
+                  Abertos Hoje
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+                </p>
               </div>
+            </div>
+
+            {hojeLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <div className="h-7 w-7 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+                <p className="text-sm">Carregando atendimentos...</p>
+              </div>
+            ) : (
+              <>
+                {/* ── Mini-stats ── */}
+                <div className="grid grid-cols-4 divide-x border-b bg-slate-50/70 shrink-0">
+                  {[
+                    { label: "Total", value: hojeData.length, color: "text-slate-800" },
+                    { label: "Encerrados",     value: hojeData.filter(d => d.situacao === "Encerrado").length,       color: "text-emerald-600" },
+                    { label: "Em Atendimento", value: hojeData.filter(d => d.situacao === "Em Atendimento").length,  color: "text-blue-600" },
+                    { label: "Pendentes",      value: hojeData.filter(d => d.situacao !== "Encerrado" && d.situacao !== "Em Atendimento").length, color: "text-amber-600" },
+                  ].map(s => (
+                    <div key={s.label} className="flex flex-col items-center py-2.5 px-3">
+                      <span className={`text-xl font-bold ${s.color}`}>{s.value}</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Lista de cards ── */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+                  {hojeData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+                      <Activity className="h-8 w-8 text-slate-300" />
+                      <p className="text-sm">Nenhum atendimento aberto hoje.</p>
+                    </div>
+                  ) : hojeData.map((item, i) => {
+                    const statusColor = STATUS_COLORS[item.situacao as keyof typeof STATUS_COLORS] ?? "#6b7280"
+                    const abertura = new Date(item.dataabertura)
+                    const horaAbertura = abertura.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+                    const durMin = item.dataencerrado
+                      ? Math.round((new Date(item.dataencerrado).getTime() - abertura.getTime()) / 60000)
+                      : null
+                    return (
+                      <div
+                        key={i}
+                        className="flex gap-3 rounded-lg border border-slate-100 bg-white px-4 py-3 shadow-sm hover:shadow-md transition-shadow"
+                        style={{ borderLeftWidth: 3, borderLeftColor: statusColor }}
+                      >
+                        {/* Conteúdo principal */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate leading-snug">
+                            {item.titulo || item.descricao || "Sem título"}
+                          </p>
+                          {item.titulo && item.descricao && (
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
+                              {item.descricao}
+                            </p>
+                          )}
+                          {/* Tags */}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                              {item.grupo}
+                            </span>
+                            {item.responsavel ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700">
+                                {item.responsavel}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-500 italic">
+                                Sem responsável
+                              </span>
+                            )}
+                            {item.usuario && (
+                              <span className="text-[10px] text-slate-400">via {item.usuario}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Lado direito: hora + status + duração */}
+                        <div className="flex flex-col items-end justify-between shrink-0 gap-1">
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                            style={{ backgroundColor: statusColor + "18", color: statusColor }}
+                          >
+                            {item.situacao}
+                          </span>
+                          <div className="text-right">
+                            <p className="text-xs font-medium text-slate-600">{horaAbertura}</p>
+                            {durMin !== null && (
+                              <p className="text-[10px] text-muted-foreground">
+                                {durMin < 60
+                                  ? `${durMin}min`
+                                  : `${Math.floor(durMin / 60)}h${durMin % 60 > 0 ? ` ${durMin % 60}min` : ""}`
+                                }
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
             )}
           </DialogContent>
         </Dialog>
@@ -248,6 +385,20 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData }: OverviewTa
           subtitle="< 15 minutos"
           icon={<Zap className="h-4 w-4" />}
           status={kpis.quickWins >= 30 ? "green" : kpis.quickWins >= 15 ? "yellow" : "red"}
+        />
+        <KPICard
+          title="Sem Responsável"
+          value={filaCount}
+          subtitle="Ao vivo · sem atribuição"
+          icon={<UserX className="h-4 w-4" />}
+          status={filaCount === 0 ? "green" : filaCount <= 5 ? "yellow" : "red"}
+        />
+        <KPICard
+          title="Casos Críticos"
+          value={kpis.criticalTickets}
+          subtitle="> 24 horas"
+          icon={<ShieldAlert className="h-4 w-4" />}
+          status={kpis.criticalTickets === 0 ? "green" : kpis.criticalTickets <= 3 ? "yellow" : "red"}
         />
       </div>
 

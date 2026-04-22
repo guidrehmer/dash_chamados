@@ -10,6 +10,7 @@ import type { Ticket, CategoryStats } from "@/lib/support-types"
 import { extractKeywords, getCategoryExamples } from "@/lib/support-utils"
 import { cn } from "@/lib/utils"
 import { Repeat, Cloud, FileText } from "lucide-react"
+import { CHART_COLORS, CATEGORY_EXAMPLES_PER_PAGE } from "@/lib/constants"
 
 function ExpandableText({ text, limit = 60 }: { text: string; limit?: number }) {
   const [expanded, setExpanded] = useState(false)
@@ -32,11 +33,6 @@ interface RecurrentTabProps {
   categoryStats: CategoryStats[]
 }
 
-const COLORS = [
-  "#1a56db", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe",
-  "#f59e0b", "#10b981", "#6366f1", "#ec4899", "#8b5cf6"
-]
-
 const chartConfig = {
   value: {
     label: "Quantidade"
@@ -48,9 +44,8 @@ export function RecurrentTab({ tickets, categoryStats }: RecurrentTabProps) {
   const categoryExamples = useMemo(() => getCategoryExamples(tickets, 5), [tickets])
   const categoryEntries = useMemo(() => Object.entries(categoryExamples), [categoryExamples])
   const [exPage, setExPage] = useState(0)
-  const EX_PER_PAGE = 4
-  const exTotalPages = Math.ceil(categoryEntries.length / EX_PER_PAGE)
-  const exPageEntries = categoryEntries.slice(exPage * EX_PER_PAGE, (exPage + 1) * EX_PER_PAGE)
+  const exTotalPages = Math.ceil(categoryEntries.length / CATEGORY_EXAMPLES_PER_PAGE)
+  const exPageEntries = categoryEntries.slice(exPage * CATEGORY_EXAMPLES_PER_PAGE, (exPage + 1) * CATEGORY_EXAMPLES_PER_PAGE)
   
   const pieData = useMemo(() => {
     const total = categoryStats.reduce((sum, c) => sum + c.total, 0)
@@ -58,7 +53,7 @@ export function RecurrentTab({ tickets, categoryStats }: RecurrentTabProps) {
       name: cat.nome,
       value: cat.total,
       percentage: Math.round((cat.total / total) * 100),
-      fill: COLORS[index % COLORS.length]
+      fill: CHART_COLORS[index % CHART_COLORS.length]
     }))
   }, [categoryStats])
 
@@ -95,7 +90,7 @@ export function RecurrentTab({ tickets, categoryStats }: RecurrentTabProps) {
                       className="h-full rounded-full transition-all"
                       style={{ 
                         width: `${percentage}%`,
-                        backgroundColor: COLORS[index % COLORS.length]
+                        backgroundColor: CHART_COLORS[index % CHART_COLORS.length]
                       }}
                     />
                   </div>
