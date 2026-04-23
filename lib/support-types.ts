@@ -120,6 +120,7 @@ export interface DailyData {
   data: string
   quantidade: number
   tma: number
+  backlog: number
 }
 
 export interface TimeDistribution {

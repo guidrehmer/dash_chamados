@@ -9,6 +9,10 @@ interface KPICardProps {
   subtitle?: string
   status?: "green" | "yellow" | "red" | "neutral"
   icon?: React.ReactNode
+  /** 0-100: exibe barra de progresso em relação à meta */
+  progressPct?: number
+  /** Rótulo da meta exibido ao lado da barra, ex: "meta: 85%" */
+  goalLabel?: string
 }
 
 const statusStyles = {
@@ -34,8 +38,9 @@ const statusStyles = {
   }
 }
 
-export function KPICard({ title, value, subtitle, status = "neutral", icon }: KPICardProps) {
+export function KPICard({ title, value, subtitle, status = "neutral", icon, progressPct, goalLabel }: KPICardProps) {
   const styles = statusStyles[status]
+  const pct = progressPct !== undefined ? Math.min(100, Math.max(0, progressPct)) : undefined
 
   return (
     <Card className={cn("transition-all", styles.bg)}>
@@ -54,6 +59,22 @@ export function KPICard({ title, value, subtitle, status = "neutral", icon }: KP
         </div>
         {subtitle && (
           <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+        )}
+        {pct !== undefined && (
+          <div className="mt-2">
+            <div className="h-1.5 bg-black/10 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${pct}%`,
+                  backgroundColor: status === "green" ? "#10b981" : status === "yellow" ? "#f59e0b" : status === "red" ? "#ef4444" : "#64748b"
+                }}
+              />
+            </div>
+            {goalLabel && (
+              <p className="text-[10px] text-muted-foreground mt-0.5 text-right">{pct.toFixed(0)}% da {goalLabel}</p>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

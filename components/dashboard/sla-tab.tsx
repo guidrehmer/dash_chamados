@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Cell, ComposedChart, Legend } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Cell, ComposedChart, Legend, ReferenceLine } from "recharts"
 import { KPICard } from "./kpi-card"
 import type { Ticket, KPIData, DailyData, TimeDistribution } from "@/lib/support-types"
 import { formatTime, truncateText, getSLAColor, getBacklogColor, getMTTAColor, getSLAViolations } from "@/lib/support-utils"
@@ -208,34 +208,75 @@ export function SLATab({ tickets, kpis, dailyData, timeDistribution }: SLATabPro
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-medium flex items-center gap-2">
             <TrendingUp className="h-4 w-4" />
-            TMA Medio por Dia
+            TMA Médio por Dia
+            <span className="text-xs font-normal text-muted-foreground ml-1">linha pontilhada = meta {SLA_TARGET_MINUTES}min</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfig} className="h-[250px] w-full">
             <LineChart data={dailyTMAData} margin={{ top: 10, right: 30, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis 
-                dataKey="data" 
-                tick={{ fontSize: 11 }} 
+              <XAxis
+                dataKey="data"
+                tick={{ fontSize: 11 }}
                 interval="preserveStartEnd"
                 tickLine={false}
               />
               <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-              <ChartTooltip 
+              <ChartTooltip
                 content={<ChartTooltipContent />}
                 formatter={(value) => [`${value} min`, "TMA"]}
               />
-              <Line 
-                type="monotone" 
-                dataKey="tma" 
-                stroke="#f59e0b" 
+              <ReferenceLine y={SLA_TARGET_MINUTES} stroke="#ef4444" strokeDasharray="4 3" strokeWidth={1.5} />
+              <Line
+                type="monotone"
+                dataKey="tma"
+                stroke="#f59e0b"
                 strokeWidth={2}
                 dot={{ fill: "#f59e0b", r: 3 }}
                 activeDot={{ r: 5 }}
               />
             </LineChart>
           </ChartContainer>
+        </CardContent>
+      </Card>
+
+      {/* Evolução do Backlog */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-medium flex items-center gap-2">
+            <Inbox className="h-4 w-4" />
+            Evolução do Backlog (últimos 30 dias)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={{ backlog: { label: "Backlog", color: "#8b5cf6" } }} className="h-[220px] w-full">
+            <LineChart data={dailyTMAData} margin={{ top: 10, right: 30, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="data"
+                tick={{ fontSize: 11 }}
+                interval="preserveStartEnd"
+                tickLine={false}
+              />
+              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
+              <ChartTooltip
+                content={<ChartTooltipContent />}
+                formatter={(value) => [`${value} tickets`, "Backlog"]}
+              />
+              <Line
+                type="monotone"
+                dataKey="backlog"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ChartContainer>
+          <p className="text-xs text-muted-foreground text-center mt-1">
+            Tickets abertos acumulados a cada dia (não encerrados)
+          </p>
         </CardContent>
       </Card>
 

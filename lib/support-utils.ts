@@ -490,10 +490,17 @@ export function getDailyData(tickets: Ticket[], days: number = 30): DailyData[] 
       ? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
       : 0
     
+    // backlog = tickets abertos até o final deste dia (abertos antes de nextDate e não encerrados antes de nextDate)
+    const backlog = tickets.filter(t =>
+      t.dataAberturaLocal < nextDate &&
+      (t.dataEncerradoLocal === null || t.dataEncerradoLocal >= nextDate)
+    ).length
+
     result.push({
       data: `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`,
       quantidade: dayTickets.length,
-      tma
+      tma,
+      backlog
     })
   }
   
@@ -655,6 +662,18 @@ export function getLast20WeeksComparison(tickets: Ticket[]): WeekComparisonPoint
   }
 
   return result
+}
+
+// Heatmap: matrix[dayOfWeek 0=Mon..6=Sun][hour 0-23] → ticket count
+export function getHeatmapData(tickets: Ticket[]): number[][] {
+  const matrix = Array.from({ length: 7 }, () => Array(24).fill(0))
+  tickets.forEach(t => {
+    const d = t.dataAberturaLocal.getDay() // 0=Dom, 1=Seg...
+    const dayIdx = d === 0 ? 6 : d - 1    // converte para Seg=0...Dom=6
+    const hour = t.dataAberturaLocal.getHours()
+    matrix[dayIdx][hour]++
+  })
+  return matrix
 }
 
 // Truncate text
