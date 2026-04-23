@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { FILA_USER_OK, FILA_USER_WARNING, FILA_DONUT_COLORS } from "@/lib/constants"
 import { cn } from "@/lib/utils"
+import { categorizeTicket, getSLATargetByPrioridade } from "@/lib/support-utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type NivelCarga = "ok" | "alerta" | "critico"
@@ -510,6 +511,7 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
                                       <th className="text-center px-3 py-2 w-28">Grupo</th>
                                       <th className="text-center px-3 py-2 w-36">Situação</th>
                                       <th className="text-center px-3 py-2 w-24">Idade</th>
+                                      <th className="text-center px-3 py-2 w-32">Risco SLA</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -523,6 +525,13 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
                                         const idadeColor =
                                           horas <= 4  ? "text-emerald-600" :
                                           horas <= 24 ? "text-amber-600"   : "text-red-600"
+                                        const cat = categorizeTicket(t.descricao || "")
+                                        const slaTarget = getSLATargetByPrioridade(cat) // minutos
+                                        const minutosAberto = horas * 60
+                                        const slaPct = Math.min(100, (minutosAberto / slaTarget) * 100)
+                                        const slaColor =
+                                          slaPct < 50  ? "#10b981" :
+                                          slaPct < 80  ? "#f59e0b" : "#ef4444"
                                         return (
                                           <tr
                                             key={ti}
@@ -552,6 +561,19 @@ export function FilaTab({ items, isLoading, lastUpdate }: FilaTabProps) {
                                             </td>
                                             <td className={cn("px-3 py-2 text-center font-semibold", idadeColor)}>
                                               {formatHoras(Math.round(horas * 10) / 10)}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                              <div className="flex flex-col items-center gap-0.5">
+                                                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                  <div
+                                                    className="h-full rounded-full transition-all"
+                                                    style={{ width: `${slaPct}%`, backgroundColor: slaColor }}
+                                                  />
+                                                </div>
+                                                <span className="text-[10px]" style={{ color: slaColor }}>
+                                                  {slaPct.toFixed(0)}%
+                                                </span>
+                                              </div>
                                             </td>
                                           </tr>
                                         )

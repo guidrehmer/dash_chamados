@@ -8,7 +8,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from 
 import { KPICard } from "./kpi-card"
 import { StatusBadge } from "./status-badge"
 import type { Ticket, KPIData, HourlyData, DailyData, FilaItem } from "@/lib/support-types"
-import { formatTime, getSLAColor } from "@/lib/support-utils"
+import { formatTime, getSLAColor, getHeatmapData } from "@/lib/support-utils"
 import { Clock, TrendingUp, AlertTriangle, Zap, BarChart3, Users, Target, Activity, UserX, ShieldAlert, AlertCircle, Inbox, ChevronDown, ChevronUp } from "lucide-react"
 import { STATUS_COLORS, CHART_COLOR_PRIMARY, RECENT_TICKETS_LIMIT } from "@/lib/constants"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -142,6 +142,9 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 
       fill: h.hora === peakHour ? "#ea580c" : "#1a56db"
     }))
   }, [hourlyData, peakHour])
+
+  const heatmapMatrix = useMemo(() => getHeatmapData(tickets), [tickets])
+  const heatmapMax   = useMemo(() => Math.max(1, ...heatmapMatrix.flat()), [heatmapMatrix])
 
   return (
     <div className="space-y-6">
@@ -490,6 +493,47 @@ export function OverviewTab({ tickets, kpis, hourlyData, dailyData, filaCount = 
               </Bar>
             </BarChart>
           </ChartContainer>
+        </CardContent>
+      </Card>
+
+      {/* Day × Hour Heatmap */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-medium">Mapa de Calor — Dia × Hora</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Hour axis labels */}
+          <div className="overflow-x-auto">
+            <div className="min-w-[640px]">
+              <div className="flex items-center mb-1 ml-10">
+                {Array.from({ length: 24 }, (_, h) => (
+                  <div key={h} className="flex-1 text-center text-[9px] text-muted-foreground">
+                    {h % 3 === 0 ? `${h}h` : ""}
+                  </div>
+                ))}
+              </div>
+              {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((day, di) => (
+                <div key={di} className="flex items-center mb-0.5">
+                  <span className="w-10 text-[10px] text-muted-foreground shrink-0">{day}</span>
+                  {heatmapMatrix[di].map((count, hi) => {
+                    const intensity = count / heatmapMax
+                    const alpha = count === 0 ? 0.05 : 0.15 + intensity * 0.85
+                    return (
+                      <div
+                        key={hi}
+                        className="flex-1 h-5 rounded-sm mx-px cursor-default"
+                        style={{ backgroundColor: `rgba(29, 78, 216, ${alpha})` }}
+                        title={`${day} ${hi}h: ${count} chamado${count !== 1 ? "s" : ""}`}
+                      />
+                    )
+                  })}
+                </div>
+              ))}
+              <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                Cor mais intensa = mais chamados abertos naquele dia e hora
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

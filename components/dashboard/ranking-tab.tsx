@@ -1,12 +1,12 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, ComposedChart, Line, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import type { Ticket, CategoryStats } from "@/lib/support-types"
-import { formatTime, getWeekComparison, calculateResponsavelStats, getLast20WeeksComparison } from "@/lib/support-utils"
+import type { Ticket, CategoryStats, PeriodFilter } from "@/lib/support-types"
+import { formatTime, getWeekComparison, calculateResponsavelStats, getLast20WeeksComparison, filterByPeriod, calculateCategoryStats } from "@/lib/support-utils"
 import { TrendingUp, TrendingDown, Minus, Award, Clock, AlertCircle, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CHART_COLORS_BLUE, CHART_COLOR_PRIMARY, CATEGORY_CHART_LIMIT } from "@/lib/constants"
@@ -23,37 +23,77 @@ const chartConfig = {
   }
 }
 
+const PERIOD_LABELS: Record<PeriodFilter, string> = {
+  hoje: "Hoje",
+  semana: "Semana",
+  mes: "Mês",
+  todos: "Todos",
+  personalizado: "Custom",
+}
+
 export function RankingTab({ tickets, categoryStats }: RankingTabProps) {
+  const [period, setPeriod] = useState<PeriodFilter>("todos")
+
   const weekComparison = useMemo(() => getWeekComparison(tickets), [tickets])
-  
+
+  // Filtered tickets + derived category stats for the selected period
+  const filteredTickets = useMemo(
+    () => period === "todos" ? tickets : filterByPeriod(tickets, period),
+    [tickets, period]
+  )
+  const filteredCategoryStats = useMemo(
+    () => period === "todos" ? categoryStats : calculateCategoryStats(filteredTickets),
+    [filteredTickets, categoryStats, period]
+  )
+
   const chartData = useMemo(() => {
-    return categoryStats.slice(0, CATEGORY_CHART_LIMIT).map((cat, index) => ({
+    return filteredCategoryStats.slice(0, CATEGORY_CHART_LIMIT).map((cat, index) => ({
       nome: cat.nome,
       total: cat.total,
       fill: CHART_COLORS_BLUE[index % CHART_COLORS_BLUE.length]
     }))
-  }, [categoryStats])
+  }, [filteredCategoryStats])
 
   const bestTMA = useMemo(() => {
-    const withTMA = categoryStats.filter(c => c.tma > 0)
-    return withTMA.length > 0 
+    const withTMA = filteredCategoryStats.filter(c => c.tma > 0)
+    return withTMA.length > 0
       ? withTMA.reduce((min, c) => c.tma < min.tma ? c : min, withTMA[0])
       : null
-  }, [categoryStats])
+  }, [filteredCategoryStats])
 
   const worstTMA = useMemo(() => {
-    return categoryStats.length > 0 
-      ? categoryStats.reduce((max, c) => c.tma > max.tma ? c : max, categoryStats[0])
+    return filteredCategoryStats.length > 0
+      ? filteredCategoryStats.reduce((max, c) => c.tma > max.tma ? c : max, filteredCategoryStats[0])
       : null
-  }, [categoryStats])
+  }, [filteredCategoryStats])
 
-  const top5 = useMemo(() => categoryStats.slice(0, 5), [categoryStats])
+  const top5 = useMemo(() => filteredCategoryStats.slice(0, 5), [filteredCategoryStats])
 
   const responsavelStats = useMemo(() => calculateResponsavelStats(tickets), [tickets])
   const weeklyData = useMemo(() => getLast20WeeksComparison(tickets), [tickets])
 
   return (
     <div className="space-y-6">
+
+      {/* Period filter */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs text-muted-foreground mr-1">Período:</span>
+        {(["hoje", "semana", "mes", "todos"] as PeriodFilter[]).map(p => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+              period === p
+                ? "bg-slate-800 text-white border-slate-800"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            )}
+          >
+            {PERIOD_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
       {/* Week Comparison */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -96,7 +136,7 @@ export function RankingTab({ tickets, categoryStats }: RankingTabProps) {
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Categorias</p>
-            <p className="text-2xl font-semibold">{categoryStats.length}</p>
+            <p className="text-2xl font-semibold">{filteredCategoryStats.length}</p>
           </CardContent>
         </Card>
       </div>
@@ -283,7 +323,7 @@ export function RankingTab({ tickets, categoryStats }: RankingTabProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {categoryStats.map((cat) => (
+                {filteredCategoryStats.map((cat) => (
                   <TableRow key={cat.nome}>
                     <TableCell className="font-medium">{cat.nome}</TableCell>
                     <TableCell className="text-right">{cat.total}</TableCell>
