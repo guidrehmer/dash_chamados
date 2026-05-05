@@ -18,6 +18,7 @@ import {
   X,
   ShieldCheck,
   Users,
+  TrendingUp,
 } from "lucide-react"
 
 // ─── Nav item types ───────────────────────────────────────────────────────────
@@ -26,6 +27,7 @@ export type NavSection =
   | "sla"
   | "ranking"
   | "recurrent"
+  | "recorrencia-atual"
   | "fila"
   | "ai"
   | "analysis"
@@ -37,23 +39,25 @@ interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: "overview",  label: "Visão Geral",      icon: LayoutDashboard },
-  { id: "sla",       label: "SLA & ITIL",        icon: ShieldCheck },
-  { id: "ranking",   label: "Ranking",            icon: BarChart3 },
-  { id: "recurrent", label: "Recorrentes",        icon: Repeat },
-  { id: "fila",      label: "Fila por Usuário",   icon: Users },
-  { id: "ai",        label: "IA Assistente",      icon: Bot },
-  { id: "analysis",  label: "Análises CSV",       icon: LineChart },
+  { id: "overview",           label: "Visão Geral",        icon: LayoutDashboard },
+  { id: "sla",                label: "SLA & ITIL",          icon: ShieldCheck },
+  { id: "ranking",            label: "Ranking",              icon: BarChart3 },
+  { id: "recurrent",          label: "Recorrentes",          icon: Repeat },
+  { id: "recorrencia-atual",  label: "Recorrência Atual",   icon: TrendingUp },
+  { id: "fila",               label: "Fila por Usuário",    icon: Users },
+  { id: "ai",                 label: "IA Assistente",       icon: Bot },
+  { id: "analysis",           label: "Análises CSV",        icon: LineChart },
 ]
 
 export const NAV_LABELS: Record<NavSection, string> = {
-  overview:  "Visão Geral",
-  sla:       "SLA & ITIL",
-  ranking:   "Ranking",
-  recurrent: "Recorrentes",
-  fila:      "Fila por Usuário",
-  ai:        "IA Assistente",
-  analysis:  "Análises CSV",
+  overview:           "Visão Geral",
+  sla:                "SLA & ITIL",
+  ranking:            "Ranking",
+  recurrent:          "Recorrentes",
+  "recorrencia-atual": "Recorrência Atual",
+  fila:               "Fila por Usuário",
+  ai:                 "IA Assistente",
+  analysis:           "Análises CSV",
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────

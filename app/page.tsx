@@ -14,6 +14,7 @@ import { RecurrentTab } from "@/components/dashboard/recurrent-tab"
 import { SLATab } from "@/components/dashboard/sla-tab"
 import { AITab } from "@/components/dashboard/ai-tab"
 import { AnalysisTab } from "@/components/dashboard/analysis-tab"
+import { RecorrenciaAtualTab } from "@/components/dashboard/recorrencia-atual-tab"
 import { FilaTab } from "@/components/dashboard/fila-tab"
 import type { TicketRaw, Ticket, PeriodFilter, GroupFilter, FilaItem, AguardandoItem } from "@/lib/support-types"
 import {
@@ -519,8 +520,13 @@ export default function DashboardPage() {
             />
           )}
 
+          {/* Recorrência Atual — fetches its own data, renders independently */}
+          {activeSection === "recorrencia-atual" && (
+            <RecorrenciaAtualTab />
+          )}
+
           {/* Content per section */}
-          {activeSection !== "fila" && data && !error && (
+          {activeSection !== "fila" && activeSection !== "recorrencia-atual" && data && !error && (
             <>
               {activeSection === "overview" && (
                 <OverviewTab
