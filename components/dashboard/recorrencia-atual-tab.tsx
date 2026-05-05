@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
   TrendingUp, AlertTriangle, Lightbulb, RefreshCw,
   ChevronDown, ChevronRight, Users, Tag, CheckCircle2,
-  AlertCircle, Clock,
+  AlertCircle, Clock, Lock, CalendarCheck,
 } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -59,16 +59,58 @@ const IMPACTO_STYLE: Record<string, { label: string; className: string }> = {
   baixo: { label: "Baixo", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
 }
 
+const CACHE_KEY = "recorrencia_cache"
+
+function todayKey() {
+  return new Date().toLocaleDateString("en-CA") // YYYY-MM-DD local
+}
+
+interface CacheEntry {
+  date: string
+  data: AnalysisResult
+}
+
+function loadCache(): CacheEntry | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as CacheEntry
+  } catch {
+    return null
+  }
+}
+
+function saveCache(data: AnalysisResult) {
+  try {
+    const entry: CacheEntry = { date: todayKey(), data }
+    localStorage.setItem(CACHE_KEY, JSON.stringify(entry))
+  } catch {
+    // localStorage indisponível (SSR ou modo privado) — ignora
+  }
+}
+
 function colorFor(cat: string) {
   return CATEGORIA_COLORS[cat] ?? "#64748b"
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function RecorrenciaAtualTab() {
-  const [result, setResult]     = useState<AnalysisResult | null>(null)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [result, setResult]         = useState<AnalysisResult | null>(null)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [expanded, setExpanded]     = useState<string | null>(null)
+  const [cachedDate, setCachedDate] = useState<string | null>(null)
+
+  // Carrega cache do dia ao montar
+  useEffect(() => {
+    const entry = loadCache()
+    if (entry && entry.date === todayKey()) {
+      setResult(entry.data)
+      setCachedDate(entry.date)
+    }
+  }, [])
+
+  const blockedByCache = cachedDate === todayKey()
 
   const toggleExpand = (cat: string) =>
     setExpanded(prev => prev === cat ? null : cat)
@@ -84,6 +126,8 @@ export function RecorrenciaAtualTab() {
         if (data.raw) setResult({ classificacoes: [], resumo: { total: 0, por_categoria: {}, por_grupo: {} }, insights: [], raw: data.raw })
       } else {
         setResult(data)
+        saveCache(data)
+        setCachedDate(todayKey())
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro desconhecido")
@@ -110,14 +154,37 @@ export function RecorrenciaAtualTab() {
             Análise IA dos chamados do dia anterior · classificação e insights de redução
           </p>
         </div>
-        <Button onClick={runAnalysis} disabled={loading} className="gap-2 shrink-0">
+        <Button
+          onClick={runAnalysis}
+          disabled={loading || blockedByCache}
+          variant={blockedByCache ? "outline" : "default"}
+          className="gap-2 shrink-0"
+        >
           {loading
             ? <RefreshCw className="h-4 w-4 animate-spin" />
-            : <TrendingUp className="h-4 w-4" />
+            : blockedByCache
+              ? <Lock className="h-4 w-4" />
+              : <TrendingUp className="h-4 w-4" />
           }
-          {loading ? "Analisando..." : result ? "Reanalisar" : "Analisar Chamados"}
+          {loading ? "Analisando..." : blockedByCache ? "Análise já realizada hoje" : result ? "Reanalisar" : "Analisar Chamados"}
         </Button>
       </div>
+
+      {/* ── Cache notice ───────────────────────────────────────────────────── */}
+      {blockedByCache && (
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <CalendarCheck className="h-5 w-5 text-emerald-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-emerald-800">
+              Análise do dia já realizada e salva localmente
+            </p>
+            <p className="text-xs text-emerald-600 mt-0.5">
+              Os dados abaixo refletem os chamados de {new Date(cachedDate + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}.
+              Uma nova análise estará disponível amanhã.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Error ──────────────────────────────────────────────────────────── */}
       {error && (
